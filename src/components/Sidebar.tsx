@@ -97,7 +97,7 @@ const Sidebar = ({ isCollapsed, onToggle }: SidebarProps) => {
         {
           title: "Stock Sales",
           icon: Truck,
-          href: "/admin/stock/dispatches",
+          href: "/admin/stock/sale",
           color: "text-purple-600"
         },
         {

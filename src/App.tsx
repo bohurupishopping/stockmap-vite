@@ -20,7 +20,7 @@ import Purchase from "./pages/Purchase";
 import NewPurchase from "./components/purchase/NewPurchase";
 import ViewPurchase from "./components/purchase/ViewPurchase";
 import EditPurchase from "./components/purchase/EditPurchase";
-import StockDispatches from "./pages/Sale";
+import Sale from "./pages/Sale";
 import NewMRDispatch from "./components/sale/NewMRDispatch";
 import NewDirectSale from "./components/sale/NewDirectSale";
 import StockAdjustments from "./pages/StockAdjustments";
@@ -148,15 +148,15 @@ const App = () => (
               } 
             />
             <Route 
-              path="/admin/stock/sa" 
+              path="/admin/stock/sale" 
               element={
                 <ProtectedRoute requireAdmin={true}>
-                  <StockDispatches />
+                  <Sale />
                 </ProtectedRoute>
               } 
             />
             <Route 
-              path="/admin/stock/dispatches/mr/new" 
+              path="/admin/stock/sale/mr/new" 
               element={
                 <ProtectedRoute requireAdmin={true}>
                   <NewMRDispatch />
@@ -164,7 +164,7 @@ const App = () => (
               } 
             />
             <Route 
-              path="/admin/stock/dispatches/sales/new" 
+              path="/admin/stock/sale/direct/new" 
               element={
                 <ProtectedRoute requireAdmin={true}>
                   <NewDirectSale />

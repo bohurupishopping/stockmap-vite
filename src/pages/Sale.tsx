@@ -32,7 +32,7 @@ interface DispatchTransaction {
   };
 }
 
-const StockDispatches = () => {
+const Sale = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -127,10 +127,7 @@ const StockDispatches = () => {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={() => navigate('/admin/dashboard')}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Dashboard
-        </Button>
+       
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Stock Dispatches</h1>
           <p className="text-gray-600 mt-1">Manage stock outflow and dispatches</p>
@@ -141,7 +138,7 @@ const StockDispatches = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Dispatch to MRs */}
         <Card className="hover:shadow-lg transition-shadow cursor-pointer"
-              onClick={() => navigate('/admin/stock/dispatches/mr/new')}>
+              onClick={() => navigate('/admin/stock/sale/mr/new')}>
           <CardHeader>
             <CardTitle className="flex items-center gap-3">
               <Truck className="h-6 w-6 text-blue-600" />
@@ -161,7 +158,7 @@ const StockDispatches = () => {
 
         {/* Direct Sales */}
         <Card className="hover:shadow-lg transition-shadow cursor-pointer"
-              onClick={() => navigate('/admin/stock/dispatches/sales/new')}>
+              onClick={() => navigate('/admin/stock/sale/direct/new')}>
           <CardHeader>
             <CardTitle className="flex items-center gap-3">
               <ShoppingCart className="h-6 w-6 text-green-600" />
@@ -302,4 +299,4 @@ const StockDispatches = () => {
   );
 };
 
-export default StockDispatches;
+export default Sale;

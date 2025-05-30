@@ -141,7 +141,7 @@ const NewMRDispatch = () => {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={() => navigate('/admin/stock/dispatches')}>
+        <Button variant="outline" onClick={() => navigate('/admin/stock/sale')}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Dispatches
         </Button>
