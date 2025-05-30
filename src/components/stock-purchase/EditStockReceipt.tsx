@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -32,10 +31,9 @@ const EditStockReceipt = () => {
       if (!id) throw new Error('Receipt ID is required');
 
       const { data, error } = await supabase
-        .from('stock_transactions')
+        .from('stock_purchases')
         .select('*')
-        .eq('transaction_group_id', id)
-        .eq('transaction_type', 'STOCK_IN_GODOWN')
+        .eq('purchase_group_id', id)
         .limit(1)
         .single();
 
@@ -63,13 +61,13 @@ const EditStockReceipt = () => {
   useEffect(() => {
     if (receiptDetails) {
       // Find supplier by name
-      const supplier = suppliers?.find(s => s.supplier_name === receiptDetails.location_id_source);
+      const supplier = suppliers?.find(s => s.supplier_name === receiptDetails.supplier_id);
       
       setFormData({
         supplier_id: supplier?.id || '',
         grn_number: receiptDetails.reference_document_id || '',
-        receipt_date: receiptDetails.transaction_date ? 
-          new Date(receiptDetails.transaction_date).toISOString().split('T')[0] : '',
+        receipt_date: receiptDetails.purchase_date ? 
+          new Date(receiptDetails.purchase_date).toISOString().split('T')[0] : '',
         notes: receiptDetails.notes || '',
       });
     }
@@ -83,14 +81,14 @@ const EditStockReceipt = () => {
       const supplier = suppliers?.find(s => s.id === formData.supplier_id);
       
       const { error } = await supabase
-        .from('stock_transactions')
+        .from('stock_purchases')
         .update({
-          location_id_source: supplier?.supplier_name || formData.supplier_id,
+          supplier_id: supplier?.supplier_name || formData.supplier_id,
           reference_document_id: formData.grn_number,
-          transaction_date: formData.receipt_date,
+          purchase_date: formData.receipt_date,
           notes: formData.notes,
         })
-        .eq('transaction_group_id', id);
+        .eq('purchase_group_id', id);
 
       if (error) throw error;
     },

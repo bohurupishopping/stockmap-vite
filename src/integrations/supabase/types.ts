@@ -48,6 +48,231 @@ export type Database = {
           },
         ]
       }
+      stock_purchases: {
+        Row: {
+          purchase_id: string
+          purchase_group_id: string
+          product_id: string
+          batch_id: string
+          quantity_strips: number
+          supplier_id: string | null
+          purchase_date: string
+          reference_document_id: string | null
+          cost_per_strip: number
+          notes: string | null
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          purchase_id?: string
+          purchase_group_id: string
+          product_id: string
+          batch_id: string
+          quantity_strips: number
+          supplier_id?: string | null
+          purchase_date?: string
+          reference_document_id?: string | null
+          cost_per_strip: number
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          purchase_id?: string
+          purchase_group_id?: string
+          product_id?: string
+          batch_id?: string
+          quantity_strips?: number
+          supplier_id?: string | null
+          purchase_date?: string
+          reference_document_id?: string | null
+          cost_per_strip?: number
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_purchases_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_purchases_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "product_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_purchases_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      stock_sales: {
+        Row: {
+          sale_id: string
+          sale_group_id: string
+          product_id: string
+          batch_id: string
+          transaction_type: string
+          quantity_strips: number
+          location_type_source: string
+          location_id_source: string | null
+          location_type_destination: string
+          location_id_destination: string | null
+          sale_date: string
+          reference_document_id: string | null
+          cost_per_strip: number
+          notes: string | null
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          sale_id?: string
+          sale_group_id: string
+          product_id: string
+          batch_id: string
+          transaction_type: string
+          quantity_strips: number
+          location_type_source: string
+          location_id_source?: string | null
+          location_type_destination: string
+          location_id_destination?: string | null
+          sale_date?: string
+          reference_document_id?: string | null
+          cost_per_strip: number
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          sale_id?: string
+          sale_group_id?: string
+          product_id?: string
+          batch_id?: string
+          transaction_type?: string
+          quantity_strips?: number
+          location_type_source?: string
+          location_id_source?: string | null
+          location_type_destination?: string
+          location_id_destination?: string | null
+          sale_date?: string
+          reference_document_id?: string | null
+          cost_per_strip?: number
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_sales_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_sales_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "product_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_sales_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      stock_adjustments: {
+        Row: {
+          adjustment_id: string
+          adjustment_group_id: string
+          product_id: string
+          batch_id: string
+          adjustment_type: string
+          quantity_strips: number
+          location_type_source: string | null
+          location_id_source: string | null
+          location_type_destination: string | null
+          location_id_destination: string | null
+          adjustment_date: string
+          reference_document_id: string | null
+          cost_per_strip: number
+          notes: string | null
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          adjustment_id?: string
+          adjustment_group_id: string
+          product_id: string
+          batch_id: string
+          adjustment_type: string
+          quantity_strips: number
+          location_type_source?: string | null
+          location_id_source?: string | null
+          location_type_destination?: string | null
+          location_id_destination?: string | null
+          adjustment_date?: string
+          reference_document_id?: string | null
+          cost_per_strip: number
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          adjustment_id?: string
+          adjustment_group_id?: string
+          product_id?: string
+          batch_id?: string
+          adjustment_type?: string
+          quantity_strips?: number
+          location_type_source?: string | null
+          location_id_source?: string | null
+          location_type_destination?: string | null
+          location_id_destination?: string | null
+          adjustment_date?: string
+          reference_document_id?: string | null
+          cost_per_strip?: number
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_adjustments_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_adjustments_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "product_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_adjustments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       product_batches: {
         Row: {
           batch_cost_per_strip: number | null
@@ -522,7 +747,43 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      stock_transactions_view: {
+        Row: {
+          transaction_id: string
+          transaction_group_id: string
+          product_id: string
+          batch_id: string
+          transaction_type: string
+          quantity_strips: number
+          location_type_source: string | null
+          location_id_source: string | null
+          location_type_destination: string | null
+          location_id_destination: string | null
+          transaction_date: string
+          reference_document_type: string | null
+          reference_document_id: string | null
+          cost_per_strip_at_transaction: number
+          notes: string | null
+          created_by: string | null
+          created_at: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_transactions_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "product_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_transactions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       is_admin: {

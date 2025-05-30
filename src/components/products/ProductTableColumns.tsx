@@ -14,6 +14,8 @@ interface ColumnConfig {
 
 interface ProductTableColumnsProps {
   onColumnToggle?: (visibleColumns: Record<string, boolean>) => void;
+  columns: ColumnConfig[];
+  storageKey?: string;
 }
 
 const defaultColumns: ColumnConfig[] = [
@@ -31,41 +33,42 @@ const defaultColumns: ColumnConfig[] = [
   { key: 'actions', label: 'Actions', defaultVisible: true },
 ];
 
-const STORAGE_KEY = 'product-table-columns';
+// Get initial visible columns from localStorage or default
+const getInitialColumns = (columns: ColumnConfig[], storageKey: string): Record<string, boolean> => {
+  try {
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return parsed;
+    }
+  } catch (error) {
+    console.error('Failed to load column visibility:', error);
+  }
+  
+  return columns.reduce((acc, col) => ({
+    ...acc,
+    [col.key]: col.defaultVisible !== false
+  }), {});
+};
 
-const ProductTableColumns: React.FC<ProductTableColumnsProps> = ({ onColumnToggle }) => {
+const ProductTableColumns: React.FC<ProductTableColumnsProps> = ({ 
+  onColumnToggle, 
+  columns,
+  storageKey = 'product-table-columns' 
+}) => {
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(
-    defaultColumns.reduce((acc, col) => ({
-      ...acc,
-      [col.key]: col.defaultVisible !== false
-    }), {})
+    getInitialColumns(columns, storageKey)
   );
 
-  // Load saved column visibility from localStorage
+  // Save to localStorage when visibility changes
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setVisibleColumns(prev => ({
-          ...prev,
-          ...parsed
-        }));
-      }
-    } catch (error) {
-      console.error('Failed to load column visibility:', error);
-    }
-  }, []);
-
-  // Save to localStorage and notify parent when visibility changes
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(visibleColumns));
+      localStorage.setItem(storageKey, JSON.stringify(visibleColumns));
       onColumnToggle?.(visibleColumns);
     } catch (error) {
       console.error('Failed to save column visibility:', error);
     }
-  }, [visibleColumns, onColumnToggle]);
+  }, [visibleColumns, onColumnToggle, storageKey]);
 
   const toggleColumn = (columnKey: string) => {
     setVisibleColumns(prev => ({
@@ -75,7 +78,7 @@ const ProductTableColumns: React.FC<ProductTableColumnsProps> = ({ onColumnToggl
   };
 
   const resetToDefault = () => {
-    const defaultVisibility = defaultColumns.reduce((acc, col) => ({
+    const defaultVisibility = columns.reduce((acc, col) => ({
       ...acc,
       [col.key]: col.defaultVisible !== false
     }), {});
@@ -107,7 +110,7 @@ const ProductTableColumns: React.FC<ProductTableColumnsProps> = ({ onColumnToggl
             </Button>
           </div>
           <div className="space-y-2 max-h-80 overflow-y-auto pr-2">
-            {defaultColumns.map((column) => (
+            {columns.map((column) => (
               <div 
                 key={column.key} 
                 className="flex items-center space-x-2 py-1.5 hover:bg-muted/50 rounded-md px-2 transition-colors"

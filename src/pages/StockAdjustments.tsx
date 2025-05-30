@@ -1,10 +1,11 @@
-
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, RotateCcw, RefreshCw, AlertTriangle, ArrowLeft } from 'lucide-react';
 
+// TODO: Update this component to use the new stock_adjustments table
+// instead of the stock_transactions table when implementing adjustment functionality
 const StockAdjustments = () => {
   const navigate = useNavigate();
 
@@ -12,10 +13,7 @@ const StockAdjustments = () => {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={() => navigate('/admin/dashboard')}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Dashboard
-        </Button>
+        
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Stock Adjustments</h1>
           <p className="text-gray-600 mt-1">Manage returns, replacements, and stock adjustments</p>

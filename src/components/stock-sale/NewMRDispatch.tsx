@@ -1,7 +1,7 @@
-
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,7 @@ const NewMRDispatch = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { profile } = useAuth();
 
   const [formData, setFormData] = useState({
     mr_user_id: '',
@@ -55,10 +56,10 @@ const NewMRDispatch = () => {
   // Save dispatch mutation
   const saveDispatchMutation = useMutation({
     mutationFn: async () => {
-      const transaction_group_id = crypto.randomUUID();
+      const sale_group_id = crypto.randomUUID();
       
-      const transactions = lineItems.map(item => ({
-        transaction_group_id,
+      const sales = lineItems.map(item => ({
+        sale_group_id,
         product_id: item.product_id,
         batch_id: item.batch_id,
         transaction_type: 'DISPATCH_TO_MR',
@@ -67,26 +68,26 @@ const NewMRDispatch = () => {
         location_id_source: 'GODOWN_MAIN',
         location_type_destination: 'MR',
         location_id_destination: formData.mr_user_id,
-        transaction_date: formData.dispatch_date,
-        reference_document_type: 'DISPATCH_NOTE',
+        sale_date: formData.dispatch_date,
         reference_document_id: formData.dispatch_reference,
-        cost_per_strip_at_transaction: item.cost_per_strip,
+        cost_per_strip: item.cost_per_strip,
         notes: item.notes || formData.notes,
+        created_by: profile?.user_id,
       }));
 
       const { error } = await supabase
-        .from('stock_transactions')
-        .insert(transactions);
+        .from('stock_sales')
+        .insert(sales);
 
       if (error) throw error;
-      return transactions;
+      return sales;
     },
     onSuccess: () => {
       toast({
         title: "Success",
         description: "MR dispatch saved successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ['stock-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-sales'] });
       navigate('/admin/stock/dispatches');
     },
     onError: (error) => {

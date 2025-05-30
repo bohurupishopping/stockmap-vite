@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -181,28 +180,28 @@ const NewReturn = () => {
     }
 
     try {
-      const transactionGroupId = crypto.randomUUID();
+      const adjustment_group_id = crypto.randomUUID();
 
-      // Create stock transactions for returns
-      const transactions = lineItems.map(item => ({
-        transaction_type: 'Return',
+      // Create stock adjustments for returns
+      const adjustments = lineItems.map(item => ({
+        adjustment_group_id,
         product_id: item.product_id,
         batch_id: item.batch_id,
+        adjustment_type: returnFrom === 'MR' ? 'RETURN_TO_MR' : 'RETURN_TO_GODOWN',
         quantity_strips: item.quantity_strips,
-        cost_per_strip_at_transaction: item.cost_per_strip,
-        transaction_date: returnDate,
-        transaction_group_id: transactionGroupId,
         location_type_source: returnFrom,
-        location_id_source: returnFrom === 'MR' ? mrUserId : 'GODOWN',
+        location_id_source: returnFrom === 'MR' ? mrUserId : 'CUSTOMER',
         location_type_destination: 'GODOWN',
         location_id_destination: 'GODOWN',
-        notes: item.notes,
+        adjustment_date: returnDate,
+        cost_per_strip: item.cost_per_strip,
+        notes: item.notes || notes,
         created_by: profile?.user_id,
       }));
 
       const { error } = await supabase
-        .from('stock_transactions')
-        .insert(transactions);
+        .from('stock_adjustments')
+        .insert(adjustments);
 
       if (error) throw error;
 

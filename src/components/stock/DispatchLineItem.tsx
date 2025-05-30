@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -86,29 +85,57 @@ const DispatchLineItem: React.FC<DispatchLineItemProps> = ({
     queryKey: ['godown-stock', item.batch_id],
     queryFn: async () => {
       if (!item.batch_id || !showGodownStock) return 0;
-      const { data, error } = await supabase
-        .from('stock_transactions')
+      
+      // Get inflow from purchases
+      const { data: purchaseData, error: purchaseError } = await supabase
+        .from('stock_purchases')
+        .select('quantity_strips')
+        .eq('batch_id', item.batch_id);
+      
+      if (purchaseError) throw purchaseError;
+      
+      const purchaseInflow = purchaseData?.reduce((sum, tx) => sum + tx.quantity_strips, 0) || 0;
+      
+      // Get inflow from adjustments (returns, etc.)
+      const { data: adjustmentInflowData, error: adjustmentInflowError } = await supabase
+        .from('stock_adjustments')
         .select('quantity_strips')
         .eq('batch_id', item.batch_id)
-        .in('location_type_destination', ['GODOWN'])
-        .in('location_id_destination', ['GODOWN_MAIN']);
+        .eq('location_type_destination', 'GODOWN')
+        .gt('quantity_strips', 0);
       
-      if (error) throw error;
+      if (adjustmentInflowError) throw adjustmentInflowError;
       
-      const inflow = data?.reduce((sum, tx) => sum + (tx.quantity_strips > 0 ? tx.quantity_strips : 0), 0) || 0;
+      const adjustmentInflow = adjustmentInflowData?.reduce((sum, tx) => sum + tx.quantity_strips, 0) || 0;
       
-      const { data: outflowData, error: outflowError } = await supabase
-        .from('stock_transactions')
+      // Get outflow from sales
+      const { data: salesData, error: salesError } = await supabase
+        .from('stock_sales')
         .select('quantity_strips')
         .eq('batch_id', item.batch_id)
-        .in('location_type_source', ['GODOWN'])
-        .in('location_id_source', ['GODOWN_MAIN']);
+        .eq('location_type_source', 'GODOWN');
       
-      if (outflowError) throw outflowError;
+      if (salesError) throw salesError;
       
-      const outflow = outflowData?.reduce((sum, tx) => sum + Math.abs(tx.quantity_strips), 0) || 0;
+      const salesOutflow = salesData?.reduce((sum, tx) => sum + Math.abs(tx.quantity_strips), 0) || 0;
       
-      return Math.max(0, inflow - outflow);
+      // Get outflow from adjustments (damages, losses, etc.)
+      const { data: adjustmentOutflowData, error: adjustmentOutflowError } = await supabase
+        .from('stock_adjustments')
+        .select('quantity_strips')
+        .eq('batch_id', item.batch_id)
+        .eq('location_type_source', 'GODOWN')
+        .lt('quantity_strips', 0);
+      
+      if (adjustmentOutflowError) throw adjustmentOutflowError;
+      
+      const adjustmentOutflow = adjustmentOutflowData?.reduce((sum, tx) => sum + Math.abs(tx.quantity_strips), 0) || 0;
+      
+      // Calculate total stock
+      const totalInflow = purchaseInflow + adjustmentInflow;
+      const totalOutflow = salesOutflow + adjustmentOutflow;
+      
+      return Math.max(0, totalInflow - totalOutflow);
     },
     enabled: !!item.batch_id && showGodownStock,
   });

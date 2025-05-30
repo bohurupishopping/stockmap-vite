@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
@@ -12,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { StockTransaction } from '@/pages/StockMovements';
+import { Tables, TablesInsert } from '@/integrations/supabase/types';
 
 interface StockTransactionModalProps {
   isOpen: boolean;
@@ -111,43 +111,116 @@ const StockTransactionModal = ({ isOpen, onClose, onSuccess, editingTransaction 
 
   const onSubmit = async (data: FormData) => {
     try {
-      const transactionData = {
-        ...data,
-        // Convert 'none' values back to null for database storage
-        location_type_source: data.location_type_source === 'none' ? null : data.location_type_source,
-        location_id_source: data.location_id_source || null,
-        location_type_destination: data.location_type_destination === 'none' ? null : data.location_type_destination,
-        location_id_destination: data.location_id_destination || null,
-        reference_document_type: data.reference_document_type === 'none' ? null : data.reference_document_type,
-        reference_document_id: data.reference_document_id || null,
-        transaction_group_id: crypto.randomUUID(), // Generate a new group ID for single transactions
-        transaction_date: new Date().toISOString(),
-      };
+      // Convert 'none' values back to null for database storage
+      const sourceType = data.location_type_source === 'none' ? null : data.location_type_source;
+      const sourceId = data.location_id_source || null;
+      const destType = data.location_type_destination === 'none' ? null : data.location_type_destination;
+      const destId = data.location_id_destination || null;
+      const refType = data.reference_document_type === 'none' ? null : data.reference_document_type;
+      const refId = data.reference_document_id || null;
+      const groupId = editingTransaction?.transaction_group_id || crypto.randomUUID();
+      const transactionDate = new Date().toISOString();
 
-      if (editingTransaction) {
-        const { error } = await supabase
-          .from('stock_transactions')
-          .update(transactionData)
-          .eq('transaction_id', editingTransaction.transaction_id);
+      // Purchase transaction
+      if (data.transaction_type === 'STOCK_IN_GODOWN') {
+        const purchaseData: TablesInsert<'stock_purchases'> = {
+          purchase_group_id: groupId,
+          product_id: data.product_id,
+          batch_id: data.batch_id,
+          quantity_strips: data.quantity_strips,
+          supplier_id: sourceId,
+          purchase_date: transactionDate,
+          reference_document_id: refId,
+          cost_per_strip: data.cost_per_strip_at_transaction,
+          notes: data.notes,
+        };
 
-        if (error) throw error;
+        if (editingTransaction) {
+          const { error } = await supabase
+            .from('stock_purchases')
+            .update(purchaseData)
+            .eq('purchase_id', editingTransaction.transaction_id);
 
-        toast({
-          title: "Success",
-          description: "Transaction updated successfully.",
-        });
-      } else {
-        const { error } = await supabase
-          .from('stock_transactions')
-          .insert([transactionData]);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('stock_purchases')
+            .insert([purchaseData]);
 
-        if (error) throw error;
-
-        toast({
-          title: "Success",
-          description: "Transaction created successfully.",
-        });
+          if (error) throw error;
+        }
       }
+      // Sale transaction
+      else if (['DISPATCH_TO_MR', 'SALE_DIRECT_GODOWN', 'SALE_BY_MR'].includes(data.transaction_type)) {
+        const saleData: TablesInsert<'stock_sales'> = {
+          sale_group_id: groupId,
+          product_id: data.product_id,
+          batch_id: data.batch_id,
+          transaction_type: data.transaction_type,
+          quantity_strips: data.quantity_strips,
+          location_type_source: sourceType as string, // Type assertion needed
+          location_id_source: sourceId,
+          location_type_destination: destType as string, // Type assertion needed
+          location_id_destination: destId,
+          sale_date: transactionDate,
+          reference_document_id: refId,
+          cost_per_strip: data.cost_per_strip_at_transaction,
+          notes: data.notes,
+        };
+
+        if (editingTransaction) {
+          const { error } = await supabase
+            .from('stock_sales')
+            .update(saleData)
+            .eq('sale_id', editingTransaction.transaction_id);
+
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('stock_sales')
+            .insert([saleData]);
+
+          if (error) throw error;
+        }
+      }
+      // Adjustment transaction
+      else {
+        const adjustmentData: TablesInsert<'stock_adjustments'> = {
+          adjustment_group_id: groupId,
+          product_id: data.product_id,
+          batch_id: data.batch_id,
+          adjustment_type: data.transaction_type,
+          quantity_strips: data.quantity_strips,
+          location_type_source: sourceType,
+          location_id_source: sourceId,
+          location_type_destination: destType,
+          location_id_destination: destId,
+          adjustment_date: transactionDate,
+          reference_document_id: refId,
+          cost_per_strip: data.cost_per_strip_at_transaction,
+          notes: data.notes,
+        };
+
+        if (editingTransaction) {
+          const { error } = await supabase
+            .from('stock_adjustments')
+            .update(adjustmentData)
+            .eq('adjustment_id', editingTransaction.transaction_id);
+
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from('stock_adjustments')
+            .insert([adjustmentData]);
+
+          if (error) throw error;
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: editingTransaction ? "Transaction updated successfully." : "Transaction created successfully.",
+      });
 
       onSuccess();
     } catch (error: any) {

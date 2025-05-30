@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -9,9 +8,20 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { Tables } from '@/integrations/supabase/types';
+
+interface StockReceiptGroup {
+  purchase_id: string;
+  purchase_group_id: string;
+  reference_document_id: string | null;
+  purchase_date: string;
+  supplier_id: string | null;
+  created_at: string;
+  created_by: string | null;
+}
 
 interface StockReceiptsTableProps {
-  receipts: any[];
+  receipts: StockReceiptGroup[];
   isLoading: boolean;
   onRefresh: () => void;
 }
@@ -21,15 +31,15 @@ const StockReceiptsTable = ({ receipts, isLoading, onRefresh }: StockReceiptsTab
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [receiptToDelete, setReceiptToDelete] = useState<any>(null);
+  const [receiptToDelete, setReceiptToDelete] = useState<StockReceiptGroup | null>(null);
 
   // Delete receipt mutation
   const deleteReceiptMutation = useMutation({
-    mutationFn: async (transactionGroupId: string) => {
+    mutationFn: async (purchaseGroupId: string) => {
       const { error } = await supabase
-        .from('stock_transactions')
+        .from('stock_purchases')
         .delete()
-        .eq('transaction_group_id', transactionGroupId);
+        .eq('purchase_group_id', purchaseGroupId);
       
       if (error) throw error;
     },
@@ -53,24 +63,24 @@ const StockReceiptsTable = ({ receipts, isLoading, onRefresh }: StockReceiptsTab
     },
   });
 
-  const handleView = (receipt: any) => {
+  const handleView = (receipt: StockReceiptGroup) => {
     // Navigate to view receipt page
-    navigate(`/admin/stock/receipts/${receipt.transaction_group_id}/view`);
+    navigate(`/admin/stock/receipts/${receipt.purchase_group_id}/view`);
   };
 
-  const handleEdit = (receipt: any) => {
+  const handleEdit = (receipt: StockReceiptGroup) => {
     // Navigate to edit receipt page
-    navigate(`/admin/stock/receipts/${receipt.transaction_group_id}/edit`);
+    navigate(`/admin/stock/receipts/${receipt.purchase_group_id}/edit`);
   };
 
-  const handleDeleteClick = (receipt: any) => {
+  const handleDeleteClick = (receipt: StockReceiptGroup) => {
     setReceiptToDelete(receipt);
     setDeleteConfirmOpen(true);
   };
 
   const handleConfirmDelete = () => {
     if (receiptToDelete) {
-      deleteReceiptMutation.mutate(receiptToDelete.transaction_group_id);
+      deleteReceiptMutation.mutate(receiptToDelete.purchase_group_id);
     }
   };
 
@@ -104,14 +114,14 @@ const StockReceiptsTable = ({ receipts, isLoading, onRefresh }: StockReceiptsTab
         </TableHeader>
         <TableBody>
           {receipts.map((receipt) => (
-            <TableRow key={receipt.transaction_group_id}>
+            <TableRow key={receipt.purchase_group_id}>
               <TableCell className="font-medium">
                 {receipt.reference_document_id || '-'}
               </TableCell>
-              <TableCell>{receipt.location_id_source || '-'}</TableCell>
+              <TableCell>{receipt.supplier_id || '-'}</TableCell>
               <TableCell>
-                {receipt.transaction_date 
-                  ? format(new Date(receipt.transaction_date), 'dd/MM/yyyy')
+                {receipt.purchase_date 
+                  ? format(new Date(receipt.purchase_date), 'dd/MM/yyyy')
                   : '-'
                 }
               </TableCell>

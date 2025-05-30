@@ -152,7 +152,23 @@ const Products = () => {
           <p className="text-sm text-muted-foreground">Manage your product catalog and inventory</p>
         </div>
         <div className="flex items-center gap-2">
-          <ProductTableColumns onColumnToggle={handleColumnToggle} />
+          <ProductTableColumns 
+            onColumnToggle={handleColumnToggle} 
+            columns={[
+              { key: 'productCode', label: 'Product Code', defaultVisible: true },
+              { key: 'productName', label: 'Product Name', defaultVisible: true },
+              { key: 'genericName', label: 'Generic Name', defaultVisible: true },
+              { key: 'manufacturer', label: 'Manufacturer', defaultVisible: true },
+              { key: 'category', label: 'Category', defaultVisible: true },
+              { key: 'subCategory', label: 'Sub-Category', defaultVisible: true },
+              { key: 'formulation', label: 'Formulation', defaultVisible: true },
+              { key: 'baseCost', label: 'Base Cost/Strip', defaultVisible: true },
+              { key: 'status', label: 'Status', defaultVisible: true },
+              { key: 'godownMin', label: 'Godown Min.', defaultVisible: true },
+              { key: 'mrMin', label: 'MR Min.', defaultVisible: true },
+              { key: 'actions', label: 'Actions', defaultVisible: true },
+            ]}
+          />
           <Link to="/admin/products/new">
             <Button className="gap-2">
               <Plus className="h-4 w-4" />

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -49,7 +48,7 @@ const StockMovements = () => {
     queryKey: ['stock-transactions', searchTerm, transactionTypeFilter],
     queryFn: async () => {
       let query = supabase
-        .from('stock_transactions')
+        .from('stock_transactions_view')
         .select(`
           *,
           products:product_id (

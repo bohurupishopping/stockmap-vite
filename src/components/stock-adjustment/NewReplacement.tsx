@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -167,47 +166,47 @@ const NewReplacement = () => {
     }
 
     try {
-      const transactionGroupId = crypto.randomUUID();
+      const adjustment_group_id = crypto.randomUUID();
 
       // Create return transactions (from customer to godown)
-      const returnTransactions = returnItems.map(item => ({
-        transaction_type: 'Replacement_Return',
+      const returnAdjustments = returnItems.map(item => ({
+        adjustment_group_id,
         product_id: item.product_id,
         batch_id: item.batch_id,
+        adjustment_type: 'RETURN_TO_GODOWN',
         quantity_strips: item.quantity_strips,
-        cost_per_strip_at_transaction: item.cost_per_strip,
-        transaction_date: replacementDate,
-        transaction_group_id: transactionGroupId,
         location_type_source: 'CUSTOMER',
         location_id_source: 'CUSTOMER',
         location_type_destination: 'GODOWN',
         location_id_destination: 'GODOWN',
-        notes: item.notes,
+        adjustment_date: replacementDate,
+        cost_per_strip: item.cost_per_strip,
+        notes: item.notes || notes,
         created_by: profile?.user_id,
       }));
 
       // Create dispatch transactions (from godown to customer)
-      const dispatchTransactions = dispatchItems.map(item => ({
-        transaction_type: 'Replacement_Dispatch',
+      const dispatchAdjustments = dispatchItems.map(item => ({
+        adjustment_group_id,
         product_id: item.product_id,
         batch_id: item.batch_id,
+        adjustment_type: 'REPLACEMENT_FROM_GODOWN',
         quantity_strips: -item.quantity_strips, // Negative because it's outgoing
-        cost_per_strip_at_transaction: item.cost_per_strip,
-        transaction_date: replacementDate,
-        transaction_group_id: transactionGroupId,
         location_type_source: 'GODOWN',
         location_id_source: 'GODOWN',
         location_type_destination: 'CUSTOMER',
         location_id_destination: 'CUSTOMER',
-        notes: item.notes,
+        adjustment_date: replacementDate,
+        cost_per_strip: item.cost_per_strip,
+        notes: item.notes || notes,
         created_by: profile?.user_id,
       }));
 
-      const allTransactions = [...returnTransactions, ...dispatchTransactions];
+      const allAdjustments = [...returnAdjustments, ...dispatchAdjustments];
 
       const { error } = await supabase
-        .from('stock_transactions')
-        .insert(allTransactions);
+        .from('stock_adjustments')
+        .insert(allAdjustments);
 
       if (error) throw error;
 

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -20,10 +19,44 @@ const StockTransactionsTable = ({ transactions, isLoading, onEdit, onRefresh }: 
 
   const handleDelete = async (transactionId: string) => {
     if (window.confirm('Are you sure you want to delete this transaction?')) {
-      const { error } = await supabase
-        .from('stock_transactions')
-        .delete()
-        .eq('transaction_id', transactionId);
+      // First determine the transaction type to know which table to delete from
+      const { data: transactionData, error: fetchError } = await supabase
+        .from('stock_transactions_view')
+        .select('transaction_id, reference_document_type')
+        .eq('transaction_id', transactionId)
+        .single();
+      
+      if (fetchError) {
+        toast({
+          title: "Error",
+          description: "Failed to fetch transaction details.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      let error;
+      
+      // Delete from the appropriate table based on the reference_document_type
+      if (transactionData.reference_document_type === 'PURCHASE') {
+        const { error: deleteError } = await supabase
+          .from('stock_purchases')
+          .delete()
+          .eq('purchase_id', transactionId);
+        error = deleteError;
+      } else if (transactionData.reference_document_type === 'SALE') {
+        const { error: deleteError } = await supabase
+          .from('stock_sales')
+          .delete()
+          .eq('sale_id', transactionId);
+        error = deleteError;
+      } else if (transactionData.reference_document_type === 'ADJUSTMENT') {
+        const { error: deleteError } = await supabase
+          .from('stock_adjustments')
+          .delete()
+          .eq('adjustment_id', transactionId);
+        error = deleteError;
+      }
 
       if (error) {
         toast({
@@ -39,6 +72,19 @@ const StockTransactionsTable = ({ transactions, isLoading, onEdit, onRefresh }: 
         onRefresh();
       }
     }
+  };
+
+  const handleEdit = (transaction: StockTransaction) => {
+    // Before passing to the edit function, determine the transaction type
+    // and set any additional properties needed for proper editing
+    const transactionToEdit = {
+      ...transaction,
+      // Ensure we have the correct reference to the original table's ID field
+      originalTableId: transaction.reference_document_type === 'PURCHASE' ? 'purchase_id' :
+                       transaction.reference_document_type === 'SALE' ? 'sale_id' : 'adjustment_id'
+    };
+    
+    onEdit(transactionToEdit);
   };
 
   const getTransactionTypeBadgeVariant = (type: string) => {
@@ -60,6 +106,11 @@ const StockTransactionsTable = ({ transactions, isLoading, onEdit, onRefresh }: 
 
   const formatDateTime = (dateString: string) => {
     return new Date(dateString).toLocaleString();
+  };
+
+  // Get the transaction date based on the reference document type
+  const getTransactionDate = (transaction: StockTransaction) => {
+    return transaction.transaction_date;
   };
 
   if (isLoading) {
@@ -148,7 +199,10 @@ const StockTransactionsTable = ({ transactions, isLoading, onEdit, onRefresh }: 
               <TableCell>
                 {transaction.reference_document_type && (
                   <div className="text-sm">
-                    <div>{transaction.reference_document_type}</div>
+                    <div>{transaction.reference_document_type === 'PURCHASE' ? 'Purchase' : 
+                          transaction.reference_document_type === 'SALE' ? 'Sale' : 
+                          transaction.reference_document_type === 'ADJUSTMENT' ? 'Adjustment' : 
+                          transaction.reference_document_type}</div>
                     {transaction.reference_document_id && (
                       <div className="text-gray-500 text-xs font-mono">{transaction.reference_document_id}</div>
                     )}
@@ -157,8 +211,8 @@ const StockTransactionsTable = ({ transactions, isLoading, onEdit, onRefresh }: 
               </TableCell>
               <TableCell>
                 <div className="text-sm">
-                  <div>{formatDate(transaction.transaction_date)}</div>
-                  <div className="text-gray-500 text-xs">{formatDateTime(transaction.transaction_date)}</div>
+                  <div>{formatDate(getTransactionDate(transaction))}</div>
+                  <div className="text-gray-500 text-xs">{formatDateTime(transaction.created_at)}</div>
                 </div>
               </TableCell>
               <TableCell className="max-w-xs truncate">
@@ -169,7 +223,7 @@ const StockTransactionsTable = ({ transactions, isLoading, onEdit, onRefresh }: 
                   <Button 
                     variant="ghost" 
                     size="sm"
-                    onClick={() => onEdit(transaction)}
+                    onClick={() => handleEdit(transaction)}
                   >
                     <Edit className="h-4 w-4" />
                   </Button>

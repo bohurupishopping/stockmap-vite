@@ -1,7 +1,7 @@
-
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,7 @@ const NewStockReceipt = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { profile } = useAuth();
 
   const [formData, setFormData] = useState({
     supplier_id: '',
@@ -74,32 +75,28 @@ const NewStockReceipt = () => {
   // Save receipt mutation
   const saveReceiptMutation = useMutation({
     mutationFn: async () => {
-      const transaction_group_id = crypto.randomUUID();
+      const purchase_group_id = crypto.randomUUID();
       const supplier = suppliers?.find(s => s.id === formData.supplier_id);
       
-      const transactions = lineItems.map(item => ({
-        transaction_group_id,
+      const purchases = lineItems.map(item => ({
+        purchase_group_id,
         product_id: item.product_id,
         batch_id: item.batch_id,
-        transaction_type: 'STOCK_IN_GODOWN',
         quantity_strips: item.quantity_strips,
-        location_type_source: 'SUPPLIER',
-        location_id_source: supplier?.supplier_name || formData.supplier_id,
-        location_type_destination: 'GODOWN',
-        location_id_destination: 'GODOWN_MAIN',
-        transaction_date: formData.receipt_date,
-        reference_document_type: 'GRN',
+        supplier_id: supplier?.supplier_name || formData.supplier_id,
+        purchase_date: formData.receipt_date,
         reference_document_id: formData.grn_number,
-        cost_per_strip_at_transaction: item.cost_per_strip,
+        cost_per_strip: item.cost_per_strip,
         notes: item.notes || formData.notes,
+        created_by: profile?.user_id,
       }));
 
       const { error } = await supabase
-        .from('stock_transactions')
-        .insert(transactions);
+        .from('stock_purchases')
+        .insert(purchases);
 
       if (error) throw error;
-      return transactions;
+      return purchases;
     },
     onSuccess: () => {
       toast({

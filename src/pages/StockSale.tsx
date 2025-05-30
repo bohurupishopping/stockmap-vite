@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -11,18 +10,17 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 
 interface DispatchTransaction {
-  transaction_id: string;
-  transaction_group_id: string;
+  sale_id: string;
+  sale_group_id: string;
   product_id: string;
   batch_id: string;
   transaction_type: string;
   quantity_strips: number;
   location_type_destination: string | null;
   location_id_destination: string | null;
-  transaction_date: string;
-  reference_document_type: string | null;
+  sale_date: string;
   reference_document_id: string | null;
-  cost_per_strip_at_transaction: number;
+  cost_per_strip: number;
   notes: string | null;
   created_at: string;
   products?: {
@@ -43,7 +41,7 @@ const StockDispatches = () => {
     queryKey: ['recent-dispatches'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('stock_transactions')
+        .from('stock_sales')
         .select(`
           *,
           products:product_id (
@@ -63,12 +61,12 @@ const StockDispatches = () => {
     },
   });
 
-  const handleDelete = async (transactionId: string) => {
+  const handleDelete = async (saleId: string) => {
     if (window.confirm('Are you sure you want to delete this dispatch? This action cannot be undone.')) {
       const { error } = await supabase
-        .from('stock_transactions')
+        .from('stock_sales')
         .delete()
-        .eq('transaction_id', transactionId);
+        .eq('sale_id', saleId);
 
       if (error) {
         toast({
@@ -90,13 +88,13 @@ const StockDispatches = () => {
     // For now, we'll show an alert with the dispatch details
     // In a real application, you might navigate to a dedicated view page
     alert(`
-      Transaction ID: ${dispatch.transaction_id}
+      Sale ID: ${dispatch.sale_id}
       Product: ${dispatch.products?.product_name}
       Batch: ${dispatch.product_batches?.batch_number}
       Quantity: ${Math.abs(dispatch.quantity_strips)} strips
       Type: ${dispatch.transaction_type}
-      Date: ${new Date(dispatch.transaction_date).toLocaleDateString()}
-      Reference: ${dispatch.reference_document_type || 'N/A'} - ${dispatch.reference_document_id || 'N/A'}
+      Date: ${new Date(dispatch.sale_date).toLocaleDateString()}
+      Reference: ${dispatch.reference_document_id || 'N/A'}
       Notes: ${dispatch.notes || 'No notes'}
     `);
   };
@@ -104,7 +102,7 @@ const StockDispatches = () => {
   const handleEdit = (dispatch: DispatchTransaction) => {
     // For now, we'll show an alert
     // In a real application, you might navigate to an edit form
-    alert(`Edit functionality for dispatch ${dispatch.transaction_id} would be implemented here.`);
+    alert(`Edit functionality for dispatch ${dispatch.sale_id} would be implemented here.`);
   };
 
   const getDispatchTypeBadge = (type: string) => {
@@ -214,7 +212,7 @@ const StockDispatches = () => {
                 </TableHeader>
                 <TableBody>
                   {recentDispatches.map((dispatch) => (
-                    <TableRow key={dispatch.transaction_id}>
+                    <TableRow key={dispatch.sale_id}>
                       <TableCell>
                         <div>
                           <div className="font-medium">
@@ -247,23 +245,21 @@ const StockDispatches = () => {
                         )}
                       </TableCell>
                       <TableCell>
-                        {dispatch.reference_document_type && (
+                        {dispatch.reference_document_id && (
                           <div className="text-sm">
-                            <div>{dispatch.reference_document_type}</div>
-                            {dispatch.reference_document_id && (
-                              <div className="text-gray-500 text-xs font-mono">{dispatch.reference_document_id}</div>
-                            )}
+                            <div>Sale</div>
+                            <div className="text-gray-500 text-xs font-mono">{dispatch.reference_document_id}</div>
                           </div>
                         )}
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          <div>{formatDate(dispatch.transaction_date)}</div>
+                          <div>{formatDate(dispatch.sale_date)}</div>
                           <div className="text-gray-500 text-xs">{formatDateTime(dispatch.created_at)}</div>
                         </div>
                       </TableCell>
                       <TableCell className="font-mono">
-                        ₹{dispatch.cost_per_strip_at_transaction}
+                        ₹{dispatch.cost_per_strip}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -286,7 +282,7 @@ const StockDispatches = () => {
                           <Button 
                             variant="ghost" 
                             size="sm"
-                            onClick={() => handleDelete(dispatch.transaction_id)}
+                            onClick={() => handleDelete(dispatch.sale_id)}
                             className="text-red-600 hover:text-red-700"
                             title="Delete dispatch"
                           >

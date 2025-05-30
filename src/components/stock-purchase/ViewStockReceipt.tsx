@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,7 +18,7 @@ const ViewStockReceipt = () => {
       if (!id) throw new Error('Receipt ID is required');
 
       const { data, error } = await supabase
-        .from('stock_transactions')
+        .from('stock_purchases')
         .select(`
           *,
           products:product_id (
@@ -33,8 +32,7 @@ const ViewStockReceipt = () => {
             expiry_date
           )
         `)
-        .eq('transaction_group_id', id)
-        .eq('transaction_type', 'STOCK_IN_GODOWN');
+        .eq('purchase_group_id', id);
 
       if (error) throw error;
       return data;
@@ -70,7 +68,7 @@ const ViewStockReceipt = () => {
 
   const firstTransaction = receiptDetails[0];
   const totalQuantity = receiptDetails.reduce((sum, item) => sum + item.quantity_strips, 0);
-  const totalValue = receiptDetails.reduce((sum, item) => sum + (item.quantity_strips * item.cost_per_strip_at_transaction), 0);
+  const totalValue = receiptDetails.reduce((sum, item) => sum + (item.quantity_strips * item.cost_per_strip), 0);
 
   return (
     <div className="p-6 space-y-6">
@@ -105,12 +103,12 @@ const ViewStockReceipt = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Supplier</label>
-              <p className="mt-1 text-gray-900">{firstTransaction.location_id_source}</p>
+              <p className="mt-1 text-gray-900">{firstTransaction.supplier_id}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Receipt Date</label>
               <p className="mt-1 text-gray-900">
-                {format(new Date(firstTransaction.transaction_date), 'dd/MM/yyyy')}
+                {format(new Date(firstTransaction.purchase_date), 'dd/MM/yyyy')}
               </p>
             </div>
             <div>
@@ -202,10 +200,10 @@ const ViewStockReceipt = () => {
                       <p>{item.quantity_strips.toLocaleString()} strips</p>
                     </td>
                     <td className="py-3">
-                      <p>₹{item.cost_per_strip_at_transaction}</p>
+                      <p>₹{item.cost_per_strip}</p>
                     </td>
                     <td className="py-3">
-                      <p>₹{(item.quantity_strips * item.cost_per_strip_at_transaction).toLocaleString()}</p>
+                      <p>₹{(item.quantity_strips * item.cost_per_strip).toLocaleString()}</p>
                     </td>
                     <td className="py-3">
                       <p>{item.product_batches?.expiry_date 
