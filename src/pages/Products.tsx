@@ -201,6 +201,22 @@ const Products = () => {
                 Add Product
               </Button>
             </Link>
+            <Link to="/admin/product-categories">
+              <Button 
+                className="h-8 px-3 bg-green-600 hover:bg-blue-700 rounded-full text-sm"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Category
+              </Button>
+            </Link>
+            <Link to="/admin/product-formulations">
+              <Button 
+                className="h-8 px-3 bg-red-600 hover:bg-blue-700 rounded-full text-sm"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Formulation
+              </Button>
+            </Link>
           </div>
         </div>
       </div>

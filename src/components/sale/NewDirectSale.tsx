@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Plus, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import DispatchLineItem from '@/components/stock/DispatchLineItem';
+import DispatchLineItem from '@/components/purchase/PurchaseLineItem';
 
 interface SaleLineItem {
   id: string;

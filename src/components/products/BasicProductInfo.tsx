@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,13 +6,24 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Plus } from 'lucide-react';
 
 interface BasicProductInfoProps {
   formData: any;
   updateFormData: (updates: any) => void;
+  onCreateCategory: () => void;
+  onCreateSubCategory: () => void;
+  onCreateFormulation: () => void;
 }
 
-const BasicProductInfo = ({ formData, updateFormData }: BasicProductInfoProps) => {
+const BasicProductInfo = ({ 
+  formData, 
+  updateFormData,
+  onCreateCategory,
+  onCreateSubCategory,
+  onCreateFormulation,
+}: BasicProductInfoProps) => {
   // Fetch categories
   const { data: categories } = useQuery({
     queryKey: ['product-categories'],
@@ -74,17 +84,19 @@ const BasicProductInfo = ({ formData, updateFormData }: BasicProductInfoProps) =
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="space-y-2">
           <Label htmlFor="product_code">Product Code *</Label>
           <Input
             id="product_code"
             value={formData.product_code}
             onChange={(e) => updateFormData({ product_code: e.target.value })}
-            placeholder="Enter unique product code"
+            placeholder="Auto-generated product code"
             required
+            readOnly
+            className="bg-gray-50"
           />
-          <p className="text-xs text-gray-500">Must be unique across all products</p>
+          <p className="text-xs text-gray-500">Auto-generated unique product code</p>
         </div>
 
         <div className="space-y-2">
@@ -121,7 +133,19 @@ const BasicProductInfo = ({ formData, updateFormData }: BasicProductInfoProps) =
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="category">Category *</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="category">Category *</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onCreateCategory}
+              className="h-6 px-2"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              New
+            </Button>
+          </div>
           <Select value={formData.category_id} onValueChange={handleCategoryChange}>
             <SelectTrigger>
               <SelectValue placeholder="Select a category" />
@@ -137,7 +161,20 @@ const BasicProductInfo = ({ formData, updateFormData }: BasicProductInfoProps) =
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="sub_category">Sub-Category</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="sub_category">Sub-Category</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onCreateSubCategory}
+              className="h-6 px-2"
+              disabled={!formData.category_id}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              New
+            </Button>
+          </div>
           <Select 
             value={formData.sub_category_id || "none"} 
             onValueChange={handleSubCategoryChange}
@@ -158,7 +195,19 @@ const BasicProductInfo = ({ formData, updateFormData }: BasicProductInfoProps) =
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="formulation">Formulation *</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="formulation">Formulation *</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onCreateFormulation}
+              className="h-6 px-2"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              New
+            </Button>
+          </div>
           <Select value={formData.formulation_id} onValueChange={(value) => updateFormData({ formulation_id: value })}>
             <SelectTrigger>
               <SelectValue placeholder="Select a formulation" />

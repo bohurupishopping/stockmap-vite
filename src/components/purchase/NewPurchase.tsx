@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Plus, Trash2, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import ReceiptLineItem from '@/components/stock/ReceiptLineItem';
+import ReceiptLineItem from '@/components/sale/SaleLineItem';
 import BatchModal from '@/components/batches/BatchModal';
 
 interface ReceiptLineItem {

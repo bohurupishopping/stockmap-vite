@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -7,9 +6,12 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Save, X } from 'lucide-react';
+import { ArrowLeft, Save, X, Plus } from 'lucide-react';
 import BasicProductInfo from '@/components/products/BasicProductInfo';
 import AdditionalProductInfo from '@/components/products/AdditionalProductInfo';
+import CreateCategoryModal from '@/components/products/CreateCategoryModal';
+import CreateSubCategoryModal from '@/components/products/CreateSubCategoryModal';
+import CreateFormulationModal from '@/components/products/CreateFormulationModal';
 
 const ProductForm = () => {
   const { id } = useParams();
@@ -36,6 +38,40 @@ const ProductForm = () => {
   });
 
   const [activeTab, setActiveTab] = useState('basic');
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isSubCategoryModalOpen, setIsSubCategoryModalOpen] = useState(false);
+  const [isFormulationModalOpen, setIsFormulationModalOpen] = useState(false);
+
+  // Fetch the last used product code to generate the next one
+  const { data: lastProductCode } = useQuery({
+    queryKey: ['last-product-code'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('product_code')
+        .ilike('product_code', 'MAP%')
+        .order('product_code', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        throw error;
+      }
+      return data;
+    },
+    enabled: !isEdit, // Only fetch for new products
+  });
+
+  // Generate new product code
+  useEffect(() => {
+    if (!isEdit && !formData.product_code) {
+      const lastCode = lastProductCode?.product_code || 'MAP00000';
+      const lastNumber = parseInt(lastCode.substring(3)); // Remove 'MAP' prefix
+      const nextNumber = lastNumber + 1;
+      const newCode = `MAP${nextNumber.toString().padStart(5, '0')}`;
+      setFormData(prev => ({ ...prev, product_code: newCode }));
+    }
+  }, [lastProductCode, isEdit]);
 
   // Fetch product data for editing
   const { data: product, isLoading } = useQuery({
@@ -144,6 +180,18 @@ const ProductForm = () => {
     setFormData(prev => ({ ...prev, ...updates }));
   };
 
+  const handleCategoryCreated = (categoryId: string) => {
+    updateFormData({ category_id: categoryId, sub_category_id: '' });
+  };
+
+  const handleSubCategoryCreated = (subCategoryId: string) => {
+    updateFormData({ sub_category_id: subCategoryId });
+  };
+
+  const handleFormulationCreated = (formulationId: string) => {
+    updateFormData({ formulation_id: formulationId });
+  };
+
   if (isEdit && isLoading) {
     return (
       <div className="p-6">
@@ -189,7 +237,10 @@ const ProductForm = () => {
               <TabsContent value="basic" className="mt-6">
                 <BasicProductInfo 
                   formData={formData} 
-                  updateFormData={updateFormData} 
+                  updateFormData={updateFormData}
+                  onCreateCategory={() => setIsCategoryModalOpen(true)}
+                  onCreateSubCategory={() => setIsSubCategoryModalOpen(true)}
+                  onCreateFormulation={() => setIsFormulationModalOpen(true)}
                 />
               </TabsContent>
               
@@ -224,6 +275,26 @@ const ProductForm = () => {
           </CardContent>
         </Card>
       </form>
+
+      {/* Modals */}
+      <CreateCategoryModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        onSuccess={handleCategoryCreated}
+      />
+
+      <CreateSubCategoryModal
+        isOpen={isSubCategoryModalOpen}
+        onClose={() => setIsSubCategoryModalOpen(false)}
+        onSuccess={handleSubCategoryCreated}
+        categoryId={formData.category_id}
+      />
+
+      <CreateFormulationModal
+        isOpen={isFormulationModalOpen}
+        onClose={() => setIsFormulationModalOpen(false)}
+        onSuccess={handleFormulationCreated}
+      />
     </div>
   );
 };

@@ -65,18 +65,8 @@ const Sidebar = ({ isCollapsed, onToggle }: SidebarProps) => {
           href: "/admin/products",
           color: "text-emerald-600"
         },
-        {
-          title: "Product Categories",
-          icon: Package,
-          href: "/admin/product-categories",
-          color: "text-emerald-600"
-        },
-        {
-          title: "Product Formulations",
-          icon: Beaker,
-          href: "/admin/product-formulations",
-          color: "text-emerald-600"
-        },
+       
+        
       ]
     },
     {
