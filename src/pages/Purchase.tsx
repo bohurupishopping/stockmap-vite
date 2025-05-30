@@ -7,19 +7,39 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, Filter } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import StockReceiptsTable from '@/components/purchase/StockReceiptsTable';
+import StockPurchaseTable from '@/components/purchase/PurchaseTable';
 import { Tables } from '@/integrations/supabase/types';
 
 type StockPurchase = Tables<'stock_purchases'>;
 
-interface StockReceiptGroup {
+interface StockPurchaseItem {
   purchase_id: string;
+  purchase_group_id: string;
+  product_id: string;
+  batch_id: string;
+  quantity_strips: number;
+  supplier_id: string | null;
+  purchase_date: string;
+  reference_document_id: string | null;
+  cost_per_strip: number;
+  notes: string | null;
+  created_at: string;
+  created_by: string | null;
+  // Joined fields
+  product_name?: string;
+  product_code?: string;
+  batch_number?: string;
+  expiry_date?: string;
+}
+
+interface StockPurchaseGroup {
   purchase_group_id: string;
   reference_document_id: string | null;
   purchase_date: string;
   supplier_id: string | null;
   created_at: string;
   created_by: string | null;
+  items: StockPurchaseItem[];
 }
 
 const Purchase = () => {
@@ -28,20 +48,27 @@ const Purchase = () => {
   const [supplierFilter, setSupplierFilter] = useState('all_suppliers');
   const [showFilters, setShowFilters] = useState(false);
 
-  // Fetch stock receipts (purchases)
-  const { data: receipts, isLoading, refetch } = useQuery({
-    queryKey: ['stock-receipts', searchTerm, supplierFilter],
+  // Fetch stock purchases with product and batch details
+  const { data: purchases, isLoading, refetch } = useQuery({
+    queryKey: ['stock-purchases', searchTerm, supplierFilter],
     queryFn: async () => {
       let query = supabase
         .from('stock_purchases')
         .select(`
           purchase_id,
           purchase_group_id,
-          reference_document_id,
-          purchase_date,
+          product_id,
+          batch_id,
+          quantity_strips,
           supplier_id,
+          purchase_date,
+          reference_document_id,
+          cost_per_strip,
+          notes,
           created_at,
-          created_by
+          created_by,
+          products:product_id(product_name, product_code),
+          product_batches:batch_id(batch_number, expiry_date)
         `)
         .order('created_at', { ascending: false });
 
@@ -59,16 +86,37 @@ const Purchase = () => {
       const { data, error } = await query;
       if (error) throw error;
 
-      // Group by purchase_group_id to get unique receipts
-      const groupedReceipts = data?.reduce((acc: StockReceiptGroup[], purchase) => {
-        const existing = acc.find(r => r.purchase_group_id === purchase.purchase_group_id);
-        if (!existing) {
-          acc.push(purchase as StockReceiptGroup);
+      // Transform data to include product and batch details
+      const transformedData = data?.map(item => ({
+        ...item,
+        product_name: item.products?.product_name,
+        product_code: item.products?.product_code,
+        batch_number: item.product_batches?.batch_number,
+        expiry_date: item.product_batches?.expiry_date,
+      }));
+
+      // Group by purchase_group_id to organize purchases
+      const groupedPurchases = transformedData?.reduce((acc: StockPurchaseGroup[], purchase) => {
+        const existingGroup = acc.find(g => g.purchase_group_id === purchase.purchase_group_id);
+        
+        if (existingGroup) {
+          existingGroup.items.push(purchase as StockPurchaseItem);
+        } else {
+          acc.push({
+            purchase_group_id: purchase.purchase_group_id,
+            reference_document_id: purchase.reference_document_id,
+            purchase_date: purchase.purchase_date,
+            supplier_id: purchase.supplier_id,
+            created_at: purchase.created_at,
+            created_by: purchase.created_by,
+            items: [purchase as StockPurchaseItem]
+          });
         }
+        
         return acc;
       }, []);
 
-      return groupedReceipts || [];
+      return groupedPurchases || [];
     },
   });
 
@@ -91,89 +139,63 @@ const Purchase = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">
-          Stock Receipts Management
-        </h1>
-        <p className="text-gray-600 mt-1">
-          Manage goods received notes and stock inflow
-        </p>
-      </div>
-
-      {/* Search and Filter Bar */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+    <div className="p-8">
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Stock Purchases Management</h1>
+          <p className="text-gray-600">Manage goods received notes and stock inflow</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-full border">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
-                placeholder="Search by GRN number or supplier..."
+                placeholder="Search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                className="pl-8 h-8 w-40 rounded-full border-0 focus-visible:ring-1"
               />
             </div>
-            <Button
-              variant="outline"
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2"
+            
+            <select
+              value={supplierFilter}
+              onChange={(e) => setSupplierFilter(e.target.value)}
+              className="h-8 px-2 rounded-full text-sm bg-white border-0 focus:ring-1 focus:ring-blue-500"
             >
-              <Filter className="h-4 w-4" />
-              Filters
-            </Button>
-            <Button onClick={handleNewReceipt} className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              New Purchase
-            </Button>
+              <option value="all_suppliers">All Suppliers</option>
+              {suppliers?.map((supplier) => (
+                <option key={supplier.id} value={supplier.supplier_name}>
+                  {supplier.supplier_name}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {showFilters && (
-            <div className="mt-4 pt-4 border-t">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Supplier</label>
-                  <Select value={supplierFilter} onValueChange={setSupplierFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All suppliers" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all_suppliers">All suppliers</SelectItem>
-                      {suppliers?.map((supplier) => (
-                        <SelectItem key={supplier.id} value={supplier.supplier_name}>
-                          {supplier.supplier_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <Button 
+            onClick={handleNewReceipt} 
+            className="h-8 px-3 bg-blue-600 hover:bg-blue-700 rounded-full text-sm"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            New Purchase
+          </Button>
+        </div>
+      </div>
 
       {/* Results Summary */}
-      <div className="flex justify-between items-center">
+      <div className="mb-4">
         <p className="text-sm text-gray-600">
-          {isLoading ? 'Loading...' : `${receipts?.length || 0} receipts found`}
+          {isLoading ? 'Loading...' : `${purchases?.length || 0} purchase groups found`}
         </p>
       </div>
 
-      {/* Receipts Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Stock Receipts</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <StockReceiptsTable
-            receipts={receipts || []}
-            isLoading={isLoading}
-            onRefresh={refetch}
-          />
-        </CardContent>
-      </Card>
+      {/* Purchases Table */}
+      <div className="bg-white rounded-lg border">
+        <StockPurchaseTable
+          purchases={purchases || []}
+          isLoading={isLoading}
+          onRefresh={refetch}
+        />
+      </div>
     </div>
   );
 };

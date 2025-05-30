@@ -188,11 +188,13 @@ const StockTable: React.FC<StockTableProps> = ({
   };
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="flex flex-col sm:flex-row sm:items-center gap-4">
+    <Card className="rounded-lg border">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <div>
-          <CardTitle>Stock Details</CardTitle>
-          <CardDescription>Current stock levels across all locations</CardDescription>
+          <CardTitle className="text-lg font-semibold">Stock Details</CardTitle>
+          <CardDescription className="text-sm text-gray-600">
+            Current stock levels across all locations
+          </CardDescription>
         </div>
         <ProductTableColumns 
           onColumnToggle={onColumnToggle} 
@@ -203,12 +205,15 @@ const StockTable: React.FC<StockTableProps> = ({
       <CardContent>
         <div className="rounded-md border">
           <div className="relative w-full overflow-auto">
-            <Table className="min-w-[1200px]">
+            <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent">
                   {visibleColumns.product && (
                     <TableHead 
-                      className={getHeaderClass('product')}
+                      className={cn(
+                        'w-[250px] text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer',
+                        !visibleColumns.product && 'hidden'
+                      )}
                       onClick={() => onSort('product_name')}
                     >
                       Product {sortField === 'product_name' && (
@@ -218,7 +223,10 @@ const StockTable: React.FC<StockTableProps> = ({
                   )}
                   {visibleColumns.genericName && (
                     <TableHead 
-                      className={getHeaderClass('genericName')}
+                      className={cn(
+                        'w-[200px] text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer',
+                        !visibleColumns.genericName && 'hidden'
+                      )}
                       onClick={() => onSort('generic_name')}
                     >
                       Generic Name {sortField === 'generic_name' && (
@@ -228,7 +236,10 @@ const StockTable: React.FC<StockTableProps> = ({
                   )}
                   {visibleColumns.batchNumber && (
                     <TableHead 
-                      className={getHeaderClass('batchNumber')}
+                      className={cn(
+                        'w-[120px] text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer',
+                        !visibleColumns.batchNumber && 'hidden'
+                      )}
                       onClick={() => onSort('batch_number')}
                     >
                       Batch Number {sortField === 'batch_number' && (
@@ -238,7 +249,10 @@ const StockTable: React.FC<StockTableProps> = ({
                   )}
                   {visibleColumns.expiryDate && (
                     <TableHead 
-                      className={getHeaderClass('expiryDate')}
+                      className={cn(
+                        'w-[120px] text-left text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer',
+                        !visibleColumns.expiryDate && 'hidden'
+                      )}
                       onClick={() => onSort('expiry_date')}
                     >
                       Expiry Date {sortField === 'expiry_date' && (
@@ -247,34 +261,45 @@ const StockTable: React.FC<StockTableProps> = ({
                     </TableHead>
                   )}
                   {visibleColumns.location && (
-                    <TableHead className={getHeaderClass('location')}>Location</TableHead>
+                    <TableHead className={cn(
+                      'w-[120px] text-left text-xs font-medium text-muted-foreground uppercase tracking-wider',
+                      !visibleColumns.location && 'hidden'
+                    )}>
+                      Location
+                    </TableHead>
                   )}
                   {visibleColumns.currentQuantityStrips && (
                     <TableHead 
-                      className={getHeaderClass('currentQuantityStrips')}
+                      className={cn(
+                        'w-[120px] text-center text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer',
+                        !visibleColumns.currentQuantityStrips && 'hidden'
+                      )}
                       onClick={() => onSort('current_quantity_strips')}
                     >
-                      Current Qty (Strips) {sortField === 'current_quantity_strips' && (
+                      Current Qty {sortField === 'current_quantity_strips' && (
                         <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
                       )}
                     </TableHead>
                   )}
-                  {visibleColumns.currentQuantityDisplay && (
-                    <TableHead className={getHeaderClass('currentQuantityDisplay')}>Current Qty (Display)</TableHead>
-                  )}
                   {visibleColumns.costPerStrip && (
                     <TableHead 
-                      className={getHeaderClass('costPerStrip')}
+                      className={cn(
+                        'w-[120px] text-right text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer',
+                        !visibleColumns.costPerStrip && 'hidden'
+                      )}
                       onClick={() => onSort('cost_per_strip')}
                     >
-                      Cost per Strip {sortField === 'cost_per_strip' && (
+                      Cost/Strip {sortField === 'cost_per_strip' && (
                         <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
                       )}
                     </TableHead>
                   )}
                   {visibleColumns.totalValue && (
                     <TableHead 
-                      className={getHeaderClass('totalValue')}
+                      className={cn(
+                        'w-[120px] text-right text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer',
+                        !visibleColumns.totalValue && 'hidden'
+                      )}
                       onClick={() => onSort('total_value')}
                     >
                       Total Value {sortField === 'total_value' && (
@@ -283,10 +308,20 @@ const StockTable: React.FC<StockTableProps> = ({
                     </TableHead>
                   )}
                   {visibleColumns.stockStatus && (
-                    <TableHead className={getHeaderClass('stockStatus')}>Stock Status</TableHead>
+                    <TableHead className={cn(
+                      'w-[120px] text-center text-xs font-medium text-muted-foreground uppercase tracking-wider',
+                      !visibleColumns.stockStatus && 'hidden'
+                    )}>
+                      Stock Status
+                    </TableHead>
                   )}
                   {visibleColumns.expiryStatus && (
-                    <TableHead className={getHeaderClass('expiryStatus')}>Expiry Status</TableHead>
+                    <TableHead className={cn(
+                      'w-[120px] text-center text-xs font-medium text-muted-foreground uppercase tracking-wider',
+                      !visibleColumns.expiryStatus && 'hidden'
+                    )}>
+                      Expiry Status
+                    </TableHead>
                   )}
                 </TableRow>
               </TableHeader>
@@ -306,11 +341,6 @@ const StockTable: React.FC<StockTableProps> = ({
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <Package className="h-8 w-8 text-muted-foreground" />
                         <p className="text-muted-foreground">No stock data found for the selected filters</p>
-                        <Button variant="outline" size="sm" onClick={() => {
-                          // This will be handled by the parent component
-                        }}>
-                          Clear filters
-                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -324,7 +354,7 @@ const StockTable: React.FC<StockTableProps> = ({
                       return (
                         <TableRow key={index} className="hover:bg-muted/50">
                           {visibleColumns.product && (
-                            <TableCell className={getCellClass('product')}>
+                            <TableCell>
                               <div className="space-y-1">
                                 <div className="font-medium">{item.product_code}</div>
                                 <div className="text-muted-foreground text-sm">{item.product_name}</div>
@@ -332,49 +362,58 @@ const StockTable: React.FC<StockTableProps> = ({
                             </TableCell>
                           )}
                           {visibleColumns.genericName && (
-                            <TableCell className={getCellClass('genericName')}>
+                            <TableCell>
                               <span className="text-muted-foreground">{item.generic_name || '-'}</span>
                             </TableCell>
                           )}
                           {visibleColumns.batchNumber && (
-                            <TableCell className={getCellClass('batchNumber')}>
-                              {item.batch_number}
+                            <TableCell>
+                              <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                                {item.batch_number}
+                              </span>
                             </TableCell>
                           )}
                           {visibleColumns.expiryDate && (
-                            <TableCell className={getCellClass('expiryDate')}>
+                            <TableCell>
                               {new Date(item.expiry_date).toLocaleDateString()}
                             </TableCell>
                           )}
                           {visibleColumns.location && (
-                            <TableCell className={getCellClass('location')}>
+                            <TableCell>
                               <Badge variant="outline">
                                 {item.location_type === 'GODOWN' ? 'Godown' : `MR ${item.location_id || '-'}`}
                               </Badge>
                             </TableCell>
                           )}
                           {visibleColumns.currentQuantityStrips && (
-                            <TableCell className={getCellClass('currentQuantityStrips')}>
-                              {item.current_quantity_strips}
-                            </TableCell>
-                          )}
-                          {visibleColumns.currentQuantityDisplay && (
-                            <TableCell className={getCellClass('currentQuantityDisplay')}>
-                              {convertStripsToDisplayUnit(item.current_quantity_strips)}
+                            <TableCell className="text-center">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${
+                                item.current_quantity_strips <= 0 
+                                  ? 'bg-red-100 text-red-800' 
+                                  : item.current_quantity_strips <= 10
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-green-100 text-green-800'
+                              }`}>
+                                {item.current_quantity_strips}
+                              </span>
                             </TableCell>
                           )}
                           {visibleColumns.costPerStrip && (
-                            <TableCell className={getCellClass('costPerStrip')}>
-                              ₹{item.cost_per_strip.toFixed(2)}
+                            <TableCell className="text-right">
+                              <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                                ₹{item.cost_per_strip.toFixed(2)}
+                              </span>
                             </TableCell>
                           )}
                           {visibleColumns.totalValue && (
-                            <TableCell className={getCellClass('totalValue')}>
-                              ₹{item.total_value.toFixed(2)}
+                            <TableCell className="text-right">
+                              <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                                ₹{item.total_value.toFixed(2)}
+                              </span>
                             </TableCell>
                           )}
                           {visibleColumns.stockStatus && (
-                            <TableCell className={getCellClass('stockStatus')}>
+                            <TableCell className="text-center">
                               <Badge variant={stockStatus.variant}>
                                 {stockStatus.status === 'low' ? 'Low Stock' : 
                                  stockStatus.status === 'medium' ? 'Medium' : 'Good'}
@@ -382,7 +421,7 @@ const StockTable: React.FC<StockTableProps> = ({
                             </TableCell>
                           )}
                           {visibleColumns.expiryStatus && (
-                            <TableCell className={getCellClass('expiryStatus')}>
+                            <TableCell className="text-center">
                               <Badge variant={expiryStatus.variant}>
                                 {expiryStatus.status === 'expired' ? 'Expired' :
                                  expiryStatus.status === 'expiring-soon' ? 'Expiring Soon' : 'Good'}

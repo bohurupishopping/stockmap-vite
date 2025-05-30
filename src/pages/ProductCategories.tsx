@@ -427,9 +427,209 @@ const ProductCategories = () => {
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Product Categories</h1>
-        <p className="text-gray-600">Manage your product categories and sub-categories</p>
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Product Categories</h1>
+          <p className="text-gray-600">Manage your product categories and sub-categories</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-full border">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 h-8 w-40 rounded-full border-0 focus-visible:ring-1"
+              />
+            </div>
+            
+            <select
+              value={activeFilter === null ? 'all' : activeFilter.toString()}
+              onChange={(e) => {
+                const value = e.target.value;
+                setActiveFilter(value === 'all' ? null : value === 'true');
+              }}
+              className="h-8 px-2 rounded-full text-sm bg-white border-0 focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="all">All</option>
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+          </div>
+
+          <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => { setEditingCategory(null); resetForm(); setIsCategoryDialogOpen(true); }} 
+                className="h-8 px-3 bg-blue-600 hover:bg-blue-700 rounded-full text-sm">
+                <Plus className="h-4 w-4 mr-1" />
+                Add Category
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingCategory ? 'Edit Category' : 'Add New Category'}
+                </DialogTitle>
+                <DialogDescription>
+                  {editingCategory 
+                    ? 'Update the category details below.' 
+                    : 'Fill in the details to create a new product category.'
+                  }
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubmit}>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <label htmlFor="category_name" className="text-sm font-medium">
+                      Category Name *
+                    </label>
+                    <Input
+                      id="category_name"
+                      value={categoryFormData.category_name}
+                      onChange={(e) => setCategoryFormData(prev => ({ ...prev, category_name: e.target.value }))}
+                      placeholder="Enter category name"
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <label htmlFor="description" className="text-sm font-medium">
+                      Description
+                    </label>
+                    <Textarea
+                      id="description"
+                      value={categoryFormData.description}
+                      onChange={(e) => setCategoryFormData(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Enter category description"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="is_active"
+                      checked={categoryFormData.is_active}
+                      onCheckedChange={(checked) => setCategoryFormData(prev => ({ ...prev, is_active: checked }))}
+                    />
+                    <label htmlFor="is_active" className="text-sm font-medium">
+                      Active Category
+                    </label>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsCategoryDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={createCategoryMutation.isPending || updateCategoryMutation.isPending}
+                  >
+                    {editingCategory ? 'Update' : 'Create'} Category
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isSubCategoryDialogOpen} onOpenChange={setIsSubCategoryDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={handleAddNewSubCategory} 
+                className="h-8 px-3 bg-blue-600 hover:bg-blue-700 rounded-full text-sm">
+                <Plus className="h-4 w-4 mr-1" />
+                Add Sub-Category
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingSubCategory ? 'Edit Sub-Category' : 'Add New Sub-Category'}
+                </DialogTitle>
+                <DialogDescription>
+                  {editingSubCategory 
+                    ? 'Update the sub-category details below.' 
+                    : 'Fill in the details to create a new product sub-category.'
+                  }
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubCategorySubmit}>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <label htmlFor="sub_category_name" className="text-sm font-medium">
+                      Sub-Category Name *
+                    </label>
+                    <Input
+                      id="sub_category_name"
+                      value={subCategoryFormData.sub_category_name}
+                      onChange={(e) => setSubCategoryFormData(prev => ({ ...prev, sub_category_name: e.target.value }))}
+                      placeholder="Enter sub-category name"
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <label htmlFor="category_id" className="text-sm font-medium">
+                      Parent Category *
+                    </label>
+                    <Select 
+                      value={subCategoryFormData.category_id} 
+                      onValueChange={(value) => setSubCategoryFormData(prev => ({ ...prev, category_id: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories?.filter(cat => cat.is_active).map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.category_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <label htmlFor="sub_description" className="text-sm font-medium">
+                      Description
+                    </label>
+                    <Textarea
+                      id="sub_description"
+                      value={subCategoryFormData.description}
+                      onChange={(e) => setSubCategoryFormData(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Enter sub-category description"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="sub_is_active"
+                      checked={subCategoryFormData.is_active}
+                      onCheckedChange={(checked) => setSubCategoryFormData(prev => ({ ...prev, is_active: checked }))}
+                    />
+                    <label htmlFor="sub_is_active" className="text-sm font-medium">
+                      Active Sub-Category
+                    </label>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsSubCategoryDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={createSubCategoryMutation.isPending || updateSubCategoryMutation.isPending}
+                  >
+                    {editingSubCategory ? 'Update' : 'Create'} Sub-Category
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <Tabs defaultValue="categories" className="w-full">
@@ -439,109 +639,6 @@ const ProductCategories = () => {
         </TabsList>
 
         <TabsContent value="categories" className="space-y-6">
-          {/* Categories Controls */}
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search categories..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-64"
-                />
-              </div>
-              
-              <select
-                value={activeFilter === null ? 'all' : activeFilter.toString()}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setActiveFilter(value === 'all' ? null : value === 'true');
-                }}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="all">All Categories</option>
-                <option value="true">Active Only</option>
-                <option value="false">Inactive Only</option>
-              </select>
-            </div>
-
-            <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={() => { setEditingCategory(null); resetForm(); setIsCategoryDialogOpen(true); }} className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add New Category
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>
-                    {editingCategory ? 'Edit Category' : 'Add New Category'}
-                  </DialogTitle>
-                  <DialogDescription>
-                    {editingCategory 
-                      ? 'Update the category details below.' 
-                      : 'Fill in the details to create a new product category.'
-                    }
-                  </DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleSubmit}>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                      <label htmlFor="category_name" className="text-sm font-medium">
-                        Category Name *
-                      </label>
-                      <Input
-                        id="category_name"
-                        value={categoryFormData.category_name}
-                        onChange={(e) => setCategoryFormData(prev => ({ ...prev, category_name: e.target.value }))}
-                        placeholder="Enter category name"
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <label htmlFor="description" className="text-sm font-medium">
-                        Description
-                      </label>
-                      <Textarea
-                        id="description"
-                        value={categoryFormData.description}
-                        onChange={(e) => setCategoryFormData(prev => ({ ...prev, description: e.target.value }))}
-                        placeholder="Enter category description"
-                        rows={3}
-                      />
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="is_active"
-                        checked={categoryFormData.is_active}
-                        onCheckedChange={(checked) => setCategoryFormData(prev => ({ ...prev, is_active: checked }))}
-                      />
-                      <label htmlFor="is_active" className="text-sm font-medium">
-                        Active Category
-                      </label>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsCategoryDialogOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={createCategoryMutation.isPending || updateCategoryMutation.isPending}
-                    >
-                      {editingCategory ? 'Update' : 'Create'} Category
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
-
           {/* Categories Table */}
           <div className="bg-white rounded-lg border">
             <Table>
@@ -621,129 +718,6 @@ const ProductCategories = () => {
         </TabsContent>
 
         <TabsContent value="subcategories" className="space-y-6">
-          {/* Sub-Categories Controls */}
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search sub-categories..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-64"
-                />
-              </div>
-              
-              <select
-                value={activeFilter === null ? 'all' : activeFilter.toString()}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setActiveFilter(value === 'all' ? null : value === 'true');
-                }}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="all">All Sub-Categories</option>
-                <option value="true">Active Only</option>
-                <option value="false">Inactive Only</option>
-              </select>
-            </div>
-
-            <Dialog open={isSubCategoryDialogOpen} onOpenChange={setIsSubCategoryDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={handleAddNewSubCategory} className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add New Sub-Category
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>
-                    {editingSubCategory ? 'Edit Sub-Category' : 'Add New Sub-Category'}
-                  </DialogTitle>
-                  <DialogDescription>
-                    {editingSubCategory 
-                      ? 'Update the sub-category details below.' 
-                      : 'Fill in the details to create a new product sub-category.'
-                    }
-                  </DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleSubCategorySubmit}>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                      <label htmlFor="sub_category_name" className="text-sm font-medium">
-                        Sub-Category Name *
-                      </label>
-                      <Input
-                        id="sub_category_name"
-                        value={subCategoryFormData.sub_category_name}
-                        onChange={(e) => setSubCategoryFormData(prev => ({ ...prev, sub_category_name: e.target.value }))}
-                        placeholder="Enter sub-category name"
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <label htmlFor="category_id" className="text-sm font-medium">
-                        Parent Category *
-                      </label>
-                      <Select 
-                        value={subCategoryFormData.category_id} 
-                        onValueChange={(value) => setSubCategoryFormData(prev => ({ ...prev, category_id: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories?.filter(cat => cat.is_active).map((category) => (
-                            <SelectItem key={category.id} value={category.id}>
-                              {category.category_name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid gap-2">
-                      <label htmlFor="sub_description" className="text-sm font-medium">
-                        Description
-                      </label>
-                      <Textarea
-                        id="sub_description"
-                        value={subCategoryFormData.description}
-                        onChange={(e) => setSubCategoryFormData(prev => ({ ...prev, description: e.target.value }))}
-                        placeholder="Enter sub-category description"
-                        rows={3}
-                      />
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="sub_is_active"
-                        checked={subCategoryFormData.is_active}
-                        onCheckedChange={(checked) => setSubCategoryFormData(prev => ({ ...prev, is_active: checked }))}
-                      />
-                      <label htmlFor="sub_is_active" className="text-sm font-medium">
-                        Active Sub-Category
-                      </label>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsSubCategoryDialogOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={createSubCategoryMutation.isPending || updateSubCategoryMutation.isPending}
-                    >
-                      {editingSubCategory ? 'Update' : 'Create'} Sub-Category
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
-
           {/* Sub-Categories Table */}
           <div className="bg-white rounded-lg border">
             <Table>

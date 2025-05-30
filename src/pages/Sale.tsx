@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Truck, ShoppingCart, ArrowLeft, Edit, Eye, Trash2 } from 'lucide-react';
+import { Plus, Truck, ShoppingCart, ArrowLeft, Edit, Eye, Trash2, Search } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+import { PostgrestFilterBuilder } from '@supabase/postgrest-js';
+import { Database } from '@/integrations/supabase/types';
 
 interface DispatchTransaction {
   sale_id: string;
@@ -35,12 +38,28 @@ interface DispatchTransaction {
 const Sale = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('all_suppliers');
+
+  // Fetch suppliers for filter
+  const { data: suppliers } = useQuery({
+    queryKey: ['suppliers-filter'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select('*')
+        .eq('is_active', true)
+        .order('supplier_name');
+      if (error) throw error;
+      return data;
+    },
+  });
 
   // Fetch recent dispatch transactions
   const { data: recentDispatches, isLoading, refetch } = useQuery({
-    queryKey: ['recent-dispatches'],
+    queryKey: ['recent-dispatches', searchTerm, supplierFilter],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('stock_sales')
         .select(`
           *,
@@ -56,6 +75,16 @@ const Sale = () => {
         .order('created_at', { ascending: false })
         .limit(10);
 
+      if (searchTerm) {
+        query = query.or(`
+          reference_document_id.ilike.%${searchTerm}%,
+          supplier_id.ilike.%${searchTerm}%
+        `);
+      }
+
+ 
+
+      const { data, error } = await query;
       if (error) throw error;
       return data as DispatchTransaction[];
     },
@@ -124,177 +153,177 @@ const Sale = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-       
+    <div className="p-8">
+      <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Stock Dispatches</h1>
-          <p className="text-gray-600 mt-1">Manage stock outflow and dispatches</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Stock Sales</h1>
+          <p className="text-gray-600">Manage stock outflow and sales</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-full border">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 h-8 w-40 rounded-full border-0 focus-visible:ring-1"
+              />
+            </div>
+            
+            <select
+              value={supplierFilter}
+              onChange={(e) => setSupplierFilter(e.target.value)}
+              className="h-8 px-2 rounded-full text-sm bg-white border-0 focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="all_suppliers">All Suppliers</option>
+              {suppliers?.map((supplier) => (
+                <option key={supplier.id} value={supplier.supplier_name}>
+                  {supplier.supplier_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Button 
+              onClick={() => navigate('/admin/stock/sale/direct/new')} 
+              className="h-8 px-3 bg-blue-600 hover:bg-blue-700 rounded-full text-sm"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Direct Sales
+            </Button>
+            <Button 
+              onClick={() => navigate('/admin/stock/sale/mr/new')} 
+              className="h-8 px-3 bg-blue-600 hover:bg-blue-700 rounded-full text-sm"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              New MR Dispatch
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Dispatch Options */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Dispatch to MRs */}
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer"
-              onClick={() => navigate('/admin/stock/sale/mr/new')}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3">
-              <Truck className="h-6 w-6 text-blue-600" />
-              Dispatch to Medical Representatives
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-600 mb-4">
-              Create dispatch notes for sending stock from godown to Medical Representatives
-            </p>
-            <Button className="w-full">
-              <Plus className="h-4 w-4 mr-2" />
-              New MR Dispatch
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Direct Sales */}
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer"
-              onClick={() => navigate('/admin/stock/sale/direct/new')}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3">
-              <ShoppingCart className="h-6 w-6 text-green-600" />
-              Direct Sales
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-gray-600 mb-4">
-              Record direct sales from godown to customers, dealers, or distributors
-            </p>
-            <Button className="w-full" variant="outline">
-              <Plus className="h-4 w-4 mr-2" />
-              New Direct Sale
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Recent Dispatches */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Dispatches</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8 text-gray-500">
-              Loading recent dispatches...
-            </div>
-          ) : !recentDispatches || recentDispatches.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No recent dispatches found
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Batch</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Destination</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Cost/Strip</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentDispatches.map((dispatch) => (
-                    <TableRow key={dispatch.sale_id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">
-                            {dispatch.products?.product_name}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {dispatch.products?.product_code}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {dispatch.product_batches?.batch_number}
-                      </TableCell>
-                      <TableCell>
-                        {getDispatchTypeBadge(dispatch.transaction_type)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="text-red-600">
-                          {Math.abs(dispatch.quantity_strips)}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {dispatch.location_type_destination && (
-                          <div className="text-sm">
-                            <div>{dispatch.location_type_destination}</div>
-                            {dispatch.location_id_destination && (
-                              <div className="text-gray-500 text-xs">{dispatch.location_id_destination}</div>
-                            )}
-                          </div>
+      <div className="bg-white rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Product</TableHead>
+              <TableHead>Batch</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Quantity</TableHead>
+              <TableHead>Destination</TableHead>
+              <TableHead>Reference</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead>Cost/Strip</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center py-8">
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <span className="ml-2">Loading sales...</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : !recentDispatches || recentDispatches.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                  No sales found. Create your first sale to get started.
+                </TableCell>
+              </TableRow>
+            ) : (
+              recentDispatches.map((dispatch) => (
+                <TableRow key={dispatch.sale_id}>
+                  <TableCell>
+                    <div>
+                      <div className="font-medium">
+                        {dispatch.products?.product_name}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {dispatch.products?.product_code}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">
+                    {dispatch.product_batches?.batch_number}
+                  </TableCell>
+                  <TableCell>
+                    {getDispatchTypeBadge(dispatch.transaction_type)}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <span className="text-red-600">
+                      {Math.abs(dispatch.quantity_strips)}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {dispatch.location_type_destination && (
+                      <div className="text-sm">
+                        <div>{dispatch.location_type_destination}</div>
+                        {dispatch.location_id_destination && (
+                          <div className="text-gray-500 text-xs">{dispatch.location_id_destination}</div>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        {dispatch.reference_document_id && (
-                          <div className="text-sm">
-                            <div>Sale</div>
-                            <div className="text-gray-500 text-xs font-mono">{dispatch.reference_document_id}</div>
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div>{formatDate(dispatch.sale_date)}</div>
-                          <div className="text-gray-500 text-xs">{formatDateTime(dispatch.created_at)}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        ₹{dispatch.cost_per_strip}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleView(dispatch)}
-                            title="View details"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleEdit(dispatch)}
-                            title="Edit dispatch"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleDelete(dispatch.sale_id)}
-                            className="text-red-600 hover:text-red-700"
-                            title="Delete dispatch"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {dispatch.reference_document_id && (
+                      <div className="text-sm">
+                        <div>Sale</div>
+                        <div className="text-gray-500 text-xs font-mono">{dispatch.reference_document_id}</div>
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm">
+                      <div>{formatDate(dispatch.sale_date)}</div>
+                      <div className="text-gray-500 text-xs">{formatDateTime(dispatch.created_at)}</div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-mono">
+                    ₹{dispatch.cost_per_strip}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 px-3 rounded-full"
+                        onClick={() => handleView(dispatch)}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        View
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 px-3 rounded-full"
+                        onClick={() => handleEdit(dispatch)}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 px-3 rounded-full text-red-600 hover:text-red-700"
+                        onClick={() => handleDelete(dispatch.sale_id)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 };

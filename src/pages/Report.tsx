@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Package, TrendingDown, AlertTriangle, DollarSign, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Package, TrendingDown, AlertTriangle, DollarSign, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import ProductTableColumns from '@/components/products/ProductTableColumns';
@@ -578,129 +578,150 @@ const ReportPage = () => {
 
   return (
     <div className="w-full p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Real-time Stock Status</h1>
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Real-time Stock Status</h1>
+          <p className="text-gray-600">Monitor and manage your stock levels across all locations</p>
         </div>
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-full border">
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="h-8 px-3 rounded-full"
+                >
+                  <Package className="h-4 w-4 mr-2" />
+                  Show Summary
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl rounded-lg p-6 shadow-lg">
+                <DialogHeader>
+                  <DialogTitle className="text-lg font-bold">Stock Summary</DialogTitle>
+                  <DialogDescription className="text-sm text-gray-600">
+                    Summary of stock status details
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mt-6">
+                  <Card className="rounded-lg shadow-sm border border-gray-200">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Total Products</CardTitle>
+                      <Package className="h-5 w-5 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-extrabold">{summary.total_products}</div>
+                    </CardContent>
+                  </Card>
 
-        {/* Summary Cards */}
-        <Dialog>
-          <DialogTrigger asChild>
-            <button className="rounded-md bg-blue-600 px-4 py-2 text-white font-semibold shadow-md hover:bg-blue-700 transition">
-              Show Summary
-            </button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl rounded-lg p-6 shadow-lg">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-bold">Stock Summary</DialogTitle>
-              <DialogDescription className="text-sm text-gray-600">
-                Summary of stock status details
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mt-6">
-              <Card className="rounded-lg shadow-sm border border-gray-200">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Products</CardTitle>
-                  <Package className="h-5 w-5 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-extrabold">{summary.total_products}</div>
-                </CardContent>
-              </Card>
+                  <Card className="rounded-lg shadow-sm border border-gray-200">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Total Batches</CardTitle>
+                      <Package className="h-5 w-5 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-extrabold">{summary.total_batches}</div>
+                    </CardContent>
+                  </Card>
 
-              <Card className="rounded-lg shadow-sm border border-gray-200">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Batches</CardTitle>
-                  <Package className="h-5 w-5 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-extrabold">{summary.total_batches}</div>
-                </CardContent>
-              </Card>
+                  <Card className="rounded-lg shadow-sm border border-gray-200">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Total Value</CardTitle>
+                      <DollarSign className="h-5 w-5 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-extrabold">₹{summary.total_value.toFixed(2)}</div>
+                    </CardContent>
+                  </Card>
 
-              <Card className="rounded-lg shadow-sm border border-gray-200">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Value</CardTitle>
-                  <DollarSign className="h-5 w-5 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-extrabold">₹{summary.total_value.toFixed(2)}</div>
-                </CardContent>
-              </Card>
+                  <Card className="rounded-lg shadow-sm border border-gray-200">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Low Stock Items</CardTitle>
+                      <TrendingDown className="h-5 w-5 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-extrabold text-red-600">{summary.low_stock_items}</div>
+                    </CardContent>
+                  </Card>
 
-              <Card className="rounded-lg shadow-sm border border-gray-200">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Low Stock Items</CardTitle>
-                  <TrendingDown className="h-5 w-5 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-extrabold text-red-600">{summary.low_stock_items}</div>
-                </CardContent>
-              </Card>
+                  <Card className="rounded-lg shadow-sm border border-gray-200">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Expiring Soon</CardTitle>
+                      <AlertTriangle className="h-5 w-5 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-extrabold text-orange-600">{summary.expiring_soon_items}</div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </DialogContent>
+            </Dialog>
 
-              <Card className="rounded-lg shadow-sm border border-gray-200">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Expiring Soon</CardTitle>
-                  <AlertTriangle className="h-5 w-5 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-extrabold text-orange-600">{summary.expiring_soon_items}</div>
-                </CardContent>
-              </Card>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Filters Component */}
-        <StockFilters
-          locationFilter={locationFilter}
-          setLocationFilter={setLocationFilter}
-          productFilter={productFilter}
-          setProductFilter={setProductFilter}
-          categoryFilter={categoryFilter}
-          setCategoryFilter={setCategoryFilter}
-          batchFilter={batchFilter}
-          setBatchFilter={setBatchFilter}
-          expiryFromDate={expiryFromDate}
-          setExpiryFromDate={setExpiryFromDate}
-          expiryToDate={expiryToDate}
-          setExpiryToDate={setExpiryToDate}
-          categories={categories}
-          mrUsers={mrUsers}
-        />
-
-        {/* Stock Table Component */}
-        <StockTable
-          stockData={stockData}
-          isLoading={isLoading}
-          visibleColumns={visibleColumns}
-          onColumnToggle={handleColumnToggle}
-          sortField={sortField}
-          sortDirection={sortDirection}
-          onSort={handleSort}
-          currentPage={currentPage}
-          setCurrentPage={setCurrentPage}
-          itemsPerPage={ITEMS_PER_PAGE}
-        />
-
-        {/* Alerts for low stock and expiring items */}
-        {summary.low_stock_items > 0 && (
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              You have {summary.low_stock_items} items with low stock levels. Consider restocking soon.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {summary.expiring_soon_items > 0 && (
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              You have {summary.expiring_soon_items} items expiring within 30 days. Review and take action.
-            </AlertDescription>
-          </Alert>
-        )}
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleClearFilters}
+              className="h-8 px-3 rounded-full"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Clear Filters
+            </Button>
+          </div>
+        </div>
       </div>
+
+      {/* Filters Component */}
+      <StockFilters
+        locationFilter={locationFilter}
+        setLocationFilter={setLocationFilter}
+        productFilter={productFilter}
+        setProductFilter={setProductFilter}
+        categoryFilter={categoryFilter}
+        setCategoryFilter={setCategoryFilter}
+        batchFilter={batchFilter}
+        setBatchFilter={setBatchFilter}
+        expiryFromDate={expiryFromDate}
+        setExpiryFromDate={setExpiryFromDate}
+        expiryToDate={expiryToDate}
+        setExpiryToDate={setExpiryToDate}
+        categories={categories}
+        mrUsers={mrUsers}
+        onClearFilters={handleClearFilters}
+      />
+
+      {/* Stock Table Component */}
+      <StockTable
+        stockData={stockData}
+        isLoading={isLoading}
+        visibleColumns={visibleColumns}
+        onColumnToggle={handleColumnToggle}
+        sortField={sortField}
+        sortDirection={sortDirection}
+        onSort={handleSort}
+        currentPage={currentPage}
+        setCurrentPage={setCurrentPage}
+        itemsPerPage={ITEMS_PER_PAGE}
+      />
+
+      {/* Alerts for low stock and expiring items */}
+      {summary.low_stock_items > 0 && (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            You have {summary.low_stock_items} items with low stock levels. Consider restocking soon.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {summary.expiring_soon_items > 0 && (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            You have {summary.expiring_soon_items} items expiring within 30 days. Review and take action.
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
   );
 };
 

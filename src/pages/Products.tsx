@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Search, Filter, Edit, Trash2, Eye, Package, Package2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Plus, Search, Filter, Edit, Trash2, Eye, Package, Package2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ProductFilters from '@/components/products/ProductFilters';
 import ProductTableColumns from '@/components/products/ProductTableColumns';
@@ -144,99 +143,101 @@ const Products = () => {
   const paginatedProducts = products?.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="p-8">
+      <div className="mb-8 flex justify-between items-center">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Products Management</h1>
-          <p className="text-sm text-muted-foreground">Manage your product catalog and inventory</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Products Management</h1>
+          <p className="text-gray-600">Manage your product catalog and inventory</p>
         </div>
-        <div className="flex items-center gap-2">
-          <ProductTableColumns 
-            onColumnToggle={handleColumnToggle} 
-            columns={[
-              { key: 'productCode', label: 'Product Code', defaultVisible: true },
-              { key: 'productName', label: 'Product Name', defaultVisible: true },
-              { key: 'genericName', label: 'Generic Name', defaultVisible: true },
-              { key: 'manufacturer', label: 'Manufacturer', defaultVisible: true },
-              { key: 'category', label: 'Category', defaultVisible: true },
-              { key: 'subCategory', label: 'Sub-Category', defaultVisible: true },
-              { key: 'formulation', label: 'Formulation', defaultVisible: true },
-              { key: 'baseCost', label: 'Base Cost/Strip', defaultVisible: true },
-              { key: 'status', label: 'Status', defaultVisible: true },
-              { key: 'godownMin', label: 'Godown Min.', defaultVisible: true },
-              { key: 'mrMin', label: 'MR Min.', defaultVisible: true },
-              { key: 'actions', label: 'Actions', defaultVisible: true },
-            ]}
-          />
-          <Link to="/admin/products/new">
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Add Product</span>
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      {/* Search and Filter Bar */}
-      <Card className="overflow-hidden">
-        <CardContent className="p-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-full border">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
-                placeholder="Search by product code, name, generic name, or manufacturer..."
+                placeholder="Search..."
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
-                  setCurrentPage(1); // Reset to first page on search
+                  setCurrentPage(1);
                 }}
-                className="pl-10 h-10"
+                className="pl-8 h-8 w-40 rounded-full border-0 focus-visible:ring-1"
               />
             </div>
+            
             <Button
               variant={showFilters ? "secondary" : "outline"}
               onClick={() => setShowFilters(!showFilters)}
-              className="gap-2 h-10"
+              className="h-8 px-3 rounded-full"
             >
-              <Filter className="h-4 w-4" />
-              <span className="hidden sm:inline">Filters</span>
+              <Filter className="h-4 w-4 mr-2" />
+              Filters
             </Button>
           </div>
 
-          {showFilters && (
-            <div className="mt-4 pt-4 border-t">
-              <ProductFilters 
-                filters={filters} 
-                setFilters={(newFilters) => {
-                  setFilters(newFilters);
-                  setCurrentPage(1); // Reset to first page when filters change
-                }} 
-              />
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <div className="flex items-center gap-1.5">
+            <ProductTableColumns 
+              onColumnToggle={handleColumnToggle} 
+              columns={[
+                { key: 'productCode', label: 'Product Code', defaultVisible: true },
+                { key: 'productName', label: 'Product Name', defaultVisible: true },
+                { key: 'genericName', label: 'Generic Name', defaultVisible: true },
+                { key: 'manufacturer', label: 'Manufacturer', defaultVisible: true },
+                { key: 'category', label: 'Category', defaultVisible: true },
+                { key: 'subCategory', label: 'Sub-Category', defaultVisible: true },
+                { key: 'formulation', label: 'Formulation', defaultVisible: true },
+                { key: 'baseCost', label: 'Base Cost', defaultVisible: true },
+                { key: 'status', label: 'Status', defaultVisible: true },
+                { key: 'godownMin', label: 'Godown Min.', defaultVisible: true },
+                { key: 'mrMin', label: 'MR Min.', defaultVisible: true },
+                { key: 'actions', label: 'Actions', defaultVisible: true },
+              ]}
+            />
+
+            <Link to="/admin/products/new">
+              <Button 
+                className="h-8 px-3 bg-blue-600 hover:bg-blue-700 rounded-full text-sm"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Product
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
 
       {/* Results Summary */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-        <p className="text-sm text-muted-foreground">
-          {isLoading ? (
-            'Loading products...'
-          ) : products?.length ? (
-            `Showing ${startIndex + 1}-${Math.min(startIndex + ITEMS_PER_PAGE, products.length)} of ${products.length} products`
-          ) : (
-            'No products found'
-          )}
+      <div className="mb-4">
+        <p className="text-sm text-gray-600">
+          {isLoading ? 'Loading...' : `${products?.length || 0} products found`}
         </p>
       </div>
 
+      {/* Filters */}
+      {showFilters && (
+        <div className="mb-6">
+          <ProductFilters 
+            filters={filters} 
+            setFilters={(newFilters) => {
+              setFilters(newFilters);
+              setCurrentPage(1);
+            }} 
+          />
+        </div>
+      )}
+
       {/* Products Table */}
-      <Card className="overflow-hidden">
-        <div className="rounded-md border">
+      <div className="bg-white rounded-lg border">
+        <div className="p-4 border-b flex justify-between items-center">
+          <h2 className="text-lg font-semibold">Product List</h2>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
+        <div className="p-4">
           <div className="relative w-full overflow-auto">
-            <Table className="min-w-[800px] md:min-w-full">
-              <TableHeader className="bg-muted/50">
+            <Table>
+              <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   {visibleColumns.productCode && <TableHead className={getHeaderClass('productCode')}>Product Code</TableHead>}
                   {visibleColumns.productName && <TableHead className={getHeaderClass('productName')}>Product Name</TableHead>}
@@ -256,9 +257,9 @@ const Products = () => {
                 {isLoading ? (
                   <TableRow>
                     <TableCell colSpan={Object.values(visibleColumns).filter(Boolean).length} className="h-24 text-center">
-                      <div className="flex flex-col items-center justify-center space-y-2">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                        <p className="text-muted-foreground">Loading products...</p>
+                      <div className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        <span className="ml-2">Loading products...</span>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -266,18 +267,24 @@ const Products = () => {
                   <TableRow>
                     <TableCell colSpan={Object.values(visibleColumns).filter(Boolean).length} className="h-24 text-center">
                       <div className="flex flex-col items-center justify-center space-y-2">
-                        <Package className="h-8 w-8 text-muted-foreground" />
-                        <p className="text-muted-foreground">No products found matching your criteria.</p>
-                        <Button variant="outline" size="sm" onClick={() => {
-                          setSearchTerm('');
-                          setFilters({
-                            category: '',
-                            subCategory: '',
-                            formulation: '',
-                            manufacturer: '',
-                            isActive: '',
-                          });
-                        }}>
+                        <Package className="h-8 w-8 text-gray-400" />
+                        <p className="text-gray-500">No products found</p>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => {
+                            setSearchTerm('');
+                            setFilters({
+                              category: '',
+                              subCategory: '',
+                              formulation: '',
+                              manufacturer: '',
+                              isActive: '',
+                            });
+                          }}
+                          className="h-8 px-3 rounded-full"
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
                           Clear filters
                         </Button>
                       </div>
@@ -285,45 +292,49 @@ const Products = () => {
                   </TableRow>
                 ) : (
                   paginatedProducts.map((product) => (
-                    <TableRow key={product.id} className="hover:bg-muted/50">
+                    <TableRow key={product.id} className="hover:bg-gray-50">
                       {visibleColumns.productCode && (
                         <TableCell className={getCellClass('productCode')}>
-                          <span className="font-mono text-sm">{product.product_code}</span>
+                          <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                            {product.product_code}
+                          </span>
                         </TableCell>
                       )}
                       {visibleColumns.productName && (
                         <TableCell className={getCellClass('productName')}>
-                          <span className="font-medium">{product.product_name}</span>
+                          <div className="font-medium">{product.product_name}</div>
                         </TableCell>
                       )}
                       {visibleColumns.genericName && (
                         <TableCell className={getCellClass('genericName')}>
-                          <span className="text-muted-foreground">{product.generic_name || '-'}</span>
+                          <span className="text-gray-600">{product.generic_name || '-'}</span>
                         </TableCell>
                       )}
                       {visibleColumns.manufacturer && (
                         <TableCell className={getCellClass('manufacturer')}>
-                          {product.manufacturer}
+                          <span className="text-gray-600">{product.manufacturer || '-'}</span>
                         </TableCell>
                       )}
                       {visibleColumns.category && (
                         <TableCell className={getCellClass('category')}>
-                          {product.category?.category_name || '-'}
+                          <span className="text-gray-600">{product.category?.category_name || '-'}</span>
                         </TableCell>
                       )}
                       {visibleColumns.subCategory && (
                         <TableCell className={getCellClass('subCategory')}>
-                          {product.sub_category?.sub_category_name || '-'}
+                          <span className="text-gray-600">{product.sub_category?.sub_category_name || '-'}</span>
                         </TableCell>
                       )}
                       {visibleColumns.formulation && (
                         <TableCell className={getCellClass('formulation')}>
-                          {product.formulation?.formulation_name || '-'}
+                          <span className="text-gray-600">{product.formulation?.formulation_name || '-'}</span>
                         </TableCell>
                       )}
                       {visibleColumns.baseCost && (
                         <TableCell className={getCellClass('baseCost')}>
-                          <span className="font-mono">₹{product.base_cost_per_strip || '0.00'}</span>
+                          <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                            ₹{product.base_cost_per_strip}
+                          </span>
                         </TableCell>
                       )}
                       {visibleColumns.status && (
@@ -335,45 +346,66 @@ const Products = () => {
                       )}
                       {visibleColumns.godownMin && (
                         <TableCell className={getCellClass('godownMin')}>
-                          {product.min_stock_level_godown || 0}
+                          <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                            {product.min_stock_level_godown || 0}
+                          </span>
                         </TableCell>
                       )}
                       {visibleColumns.mrMin && (
                         <TableCell className={getCellClass('mrMin')}>
-                          {product.min_stock_level_mr || 0}
+                          <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                            {product.min_stock_level_mr || 0}
+                          </span>
                         </TableCell>
                       )}
                       {visibleColumns.actions && (
                         <TableCell className={getCellClass('actions')}>
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                          <div className="flex justify-end gap-2">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-gray-100"
+                              asChild
+                            >
                               <Link to={`/admin/products/${product.id}`} title="View details">
                                 <Eye className="h-4 w-4" />
                               </Link>
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-gray-100"
+                              asChild
+                            >
                               <Link to={`/admin/products/${product.id}/edit`} title="Edit">
                                 <Edit className="h-4 w-4" />
                               </Link>
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-gray-100"
+                              asChild
+                            >
                               <Link to={`/admin/products/${product.id}/packaging`} title="Packaging">
                                 <Package2 className="h-4 w-4" />
                               </Link>
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-gray-100"
+                              asChild
+                            >
                               <Link to={`/admin/products/${product.id}/batches`} title="Batches">
                                 <Package className="h-4 w-4" />
                               </Link>
                             </Button>
                             <Button 
                               variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 text-destructive hover:text-destructive/90 hover:bg-destructive/10"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handleDeleteProduct(product.id);
-                              }}
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-red-50 text-red-600 hover:text-red-700"
+                              onClick={() => handleDeleteProduct(product.id)}
                               title="Delete"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -388,59 +420,61 @@ const Products = () => {
             </Table>
           </div>
         </div>
-        {totalPages > 1 && (
-          <CardFooter className="flex items-center justify-between px-6 py-4 border-t">
-            <div className="text-sm text-muted-foreground">
-              Page {currentPage} of {totalPages}
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between">
+          <div className="text-sm text-gray-600">
+            Page {currentPage} of {totalPages}
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="h-8 w-8 p-0"
+            >
+              <span className="sr-only">Go to first page</span>
+              <ChevronsLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="h-8 w-8 p-0"
+            >
+              <span className="sr-only">Go to previous page</span>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center justify-center text-sm font-medium w-8">
+              {currentPage}
             </div>
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(1)}
-                disabled={currentPage === 1}
-                className="h-8 w-8 p-0"
-              >
-                <span className="sr-only">Go to first page</span>
-                <ChevronsLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage === 1}
-                className="h-8 w-8 p-0"
-              >
-                <span className="sr-only">Go to previous page</span>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <div className="flex items-center justify-center text-sm font-medium w-8">
-                {currentPage}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage === totalPages}
-                className="h-8 w-8 p-0"
-              >
-                <span className="sr-only">Go to next page</span>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={currentPage === totalPages}
-                className="h-8 w-8 p-0"
-              >
-                <span className="sr-only">Go to last page</span>
-                <ChevronsRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardFooter>
-        )}
-      </Card>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className="h-8 w-8 p-0"
+            >
+              <span className="sr-only">Go to next page</span>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="h-8 w-8 p-0"
+            >
+              <span className="sr-only">Go to last page</span>
+              <ChevronsRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
