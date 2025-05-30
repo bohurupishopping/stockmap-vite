@@ -7,7 +7,7 @@ import { ArrowLeft, Edit } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { format } from 'date-fns';
 
-const ViewStockReceipt = () => {
+const ViewPurchase = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
 
@@ -54,7 +54,7 @@ const ViewStockReceipt = () => {
     return (
       <div className="p-6 space-y-6">
         <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => navigate('/admin/stock/receipts')}>
+          <Button variant="outline" onClick={() => navigate('/admin/stock/purchase')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Receipts
           </Button>
@@ -75,7 +75,7 @@ const ViewStockReceipt = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => navigate('/admin/stock/receipts')}>
+          <Button variant="outline" onClick={() => navigate('/admin/stock/purchase')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Receipts
           </Button>
@@ -222,4 +222,4 @@ const ViewStockReceipt = () => {
   );
 };
 
-export default ViewStockReceipt;
+export default ViewPurchase;

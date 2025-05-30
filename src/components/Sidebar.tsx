@@ -91,7 +91,7 @@ const Sidebar = ({ isCollapsed, onToggle }: SidebarProps) => {
         {
           title: "Stock Purchase",
           icon: PackageOpen,
-          href: "/admin/stock/receipts",
+          href: "/admin/stock/purchase",
           color: "text-purple-600"
         },
         {
@@ -107,9 +107,9 @@ const Sidebar = ({ isCollapsed, onToggle }: SidebarProps) => {
           color: "text-purple-600"
         },
         {
-          title: "Stock Status",
+          title: "Report",
           icon: BarChart3,
-          href: "/admin/stock-status",
+          href: "/admin/report",
           color: "text-purple-600"
         },
       ]

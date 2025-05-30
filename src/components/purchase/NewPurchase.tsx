@@ -25,7 +25,7 @@ interface ReceiptLineItem {
   notes: string;
 }
 
-const NewStockReceipt = () => {
+const NewPurchase = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -72,8 +72,8 @@ const NewStockReceipt = () => {
     enabled: !!selectedProductId,
   });
 
-  // Save receipt mutation
-  const saveReceiptMutation = useMutation({
+  // Save purchase mutation
+  const savePurchaseMutation = useMutation({
     mutationFn: async () => {
       const purchase_group_id = crypto.randomUUID();
       const supplier = suppliers?.find(s => s.id === formData.supplier_id);
@@ -101,10 +101,10 @@ const NewStockReceipt = () => {
     onSuccess: () => {
       toast({
         title: "Success",
-        description: "Stock receipt saved successfully",
+        description: "Stock purchase saved successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ['stock-receipts'] });
-      navigate('/admin/stock/receipts');
+      queryClient.invalidateQueries({ queryKey: ['stock-purchases'] });
+      navigate('/admin/stock/purchase');
     },
     onError: (error) => {
       toast({
@@ -150,7 +150,7 @@ const NewStockReceipt = () => {
       return;
     }
 
-    saveReceiptMutation.mutate();
+    savePurchaseMutation.mutate();
   };
 
   const handleBatchCreated = () => {
@@ -164,7 +164,7 @@ const NewStockReceipt = () => {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={() => navigate('/admin/stock/receipts')}>
+        <Button variant="outline" onClick={() => navigate('/admin/stock/purchase')}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Receipts
         </Button>
@@ -271,15 +271,15 @@ const NewStockReceipt = () => {
       <div className="flex justify-end gap-4">
         <Button 
           variant="outline" 
-          onClick={() => navigate('/admin/stock/receipts')}
+          onClick={() => navigate('/admin/stock/purchase')}
         >
           Cancel
         </Button>
         <Button 
           onClick={handleSave}
-          disabled={saveReceiptMutation.isPending}
+          disabled={savePurchaseMutation.isPending}
         >
-          {saveReceiptMutation.isPending ? 'Saving...' : 'Save Receipt'}
+          {savePurchaseMutation.isPending ? 'Saving...' : 'Save Purchase'}
         </Button>
       </div>
 
@@ -301,4 +301,4 @@ const NewStockReceipt = () => {
   );
 };
 
-export default NewStockReceipt;
+export default NewPurchase;

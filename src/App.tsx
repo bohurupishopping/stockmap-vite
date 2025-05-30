@@ -16,18 +16,18 @@ import ProductForm from "./components/products/ProductForm";
 import ProductPackaging from "./components/products/ProductPackaging";
 import ProductBatches from "./components/products/ProductBatches";
 import StockMovements from "./pages/StockMovements";
-import StockReceipts from "./pages/StockPurchase";
-import NewStockReceipt from "./components/stock-purchase/NewStockReceipt";
-import ViewStockReceipt from "./components/stock-purchase/ViewStockReceipt";
-import EditStockReceipt from "./components/stock-purchase/EditStockReceipt";
-import StockDispatches from "./pages/StockSale";
-import NewMRDispatch from "./components/stock-sale/NewMRDispatch";
-import NewDirectSale from "./components/stock-sale/NewDirectSale";
+import Purchase from "./pages/Purchase";
+import NewPurchase from "./components/purchase/NewPurchase";
+import ViewPurchase from "./components/purchase/ViewPurchase";
+import EditPurchase from "./components/purchase/EditPurchase";
+import StockDispatches from "./pages/Sale";
+import NewMRDispatch from "./components/sale/NewMRDispatch";
+import NewDirectSale from "./components/sale/NewDirectSale";
 import StockAdjustments from "./pages/StockAdjustments";
 import NewReturn from "./components/stock-adjustment/NewReturn";
 import NewReplacement from "./components/stock-adjustment/NewReplacement";
 import NewDamageLoss from "./components/stock-adjustment/NewDamageLoss";
-import StockStatus from "./pages/StockStatus";
+import StockStatus from "./pages/Report";
 import Suppliers from "./pages/Suppliers";
 import NotFound from "./pages/NotFound";
 
@@ -116,39 +116,39 @@ const App = () => (
               } 
             />
             <Route 
-              path="/admin/stock/receipts" 
+              path="/admin/stock/purchase" 
               element={
                 <ProtectedRoute requireAdmin={true}>
-                  <StockReceipts />
+                  <Purchase />
                 </ProtectedRoute>
               } 
             />
             <Route 
-              path="/admin/stock/receipts/new" 
+              path="/admin/stock/purchase/new" 
               element={
                 <ProtectedRoute requireAdmin={true}>
-                  <NewStockReceipt />
+                  <NewPurchase />
                 </ProtectedRoute>
               } 
             />
             <Route 
-              path="/admin/stock/receipts/:id/view" 
+              path="/admin/stock/purchase/:id/view" 
               element={
                 <ProtectedRoute requireAdmin={true}>
-                  <ViewStockReceipt />
+                  <ViewPurchase />
                 </ProtectedRoute>
               } 
             />
             <Route 
-              path="/admin/stock/receipts/:id/edit" 
+              path="/admin/stock/purchase/:id/edit" 
               element={
                 <ProtectedRoute requireAdmin={true}>
-                  <EditStockReceipt />
+                  <EditPurchase />
                 </ProtectedRoute>
               } 
             />
             <Route 
-              path="/admin/stock/dispatches" 
+              path="/admin/stock/sa" 
               element={
                 <ProtectedRoute requireAdmin={true}>
                   <StockDispatches />
@@ -204,7 +204,7 @@ const App = () => (
               } 
             />
             <Route 
-              path="/admin/stock-status" 
+              path="/admin/report" 
               element={
                 <ProtectedRoute requireAdmin={true}>
                   <StockStatus />

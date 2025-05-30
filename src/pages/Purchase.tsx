@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, Filter } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import StockReceiptsTable from '@/components/stock-purchase/StockReceiptsTable';
+import StockReceiptsTable from '@/components/purchase/StockReceiptsTable';
 import { Tables } from '@/integrations/supabase/types';
 
 type StockPurchase = Tables<'stock_purchases'>;
@@ -22,7 +22,7 @@ interface StockReceiptGroup {
   created_by: string | null;
 }
 
-const StockReceipts = () => {
+const Purchase = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('all_suppliers');
@@ -87,7 +87,7 @@ const StockReceipts = () => {
   });
 
   const handleNewReceipt = () => {
-    navigate('/admin/stock/receipts/new');
+    navigate('/admin/stock/purchase/new');
   };
 
   return (
@@ -125,7 +125,7 @@ const StockReceipts = () => {
             </Button>
             <Button onClick={handleNewReceipt} className="flex items-center gap-2">
               <Plus className="h-4 w-4" />
-              New Receipt
+              New Purchase
             </Button>
           </div>
 
@@ -178,4 +178,4 @@ const StockReceipts = () => {
   );
 };
 
-export default StockReceipts;
+export default Purchase;

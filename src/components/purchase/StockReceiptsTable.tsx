@@ -65,12 +65,12 @@ const StockReceiptsTable = ({ receipts, isLoading, onRefresh }: StockReceiptsTab
 
   const handleView = (receipt: StockReceiptGroup) => {
     // Navigate to view receipt page
-    navigate(`/admin/stock/receipts/${receipt.purchase_group_id}/view`);
+    navigate(`/admin/stock/purchase/${receipt.purchase_group_id}/view`);
   };
 
   const handleEdit = (receipt: StockReceiptGroup) => {
     // Navigate to edit receipt page
-    navigate(`/admin/stock/receipts/${receipt.purchase_group_id}/edit`);
+    navigate(`/admin/stock/purchase/${receipt.purchase_group_id}/edit`);
   };
 
   const handleDeleteClick = (receipt: StockReceiptGroup) => {
