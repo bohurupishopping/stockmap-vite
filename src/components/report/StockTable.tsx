@@ -82,7 +82,7 @@ interface StockTableProps {
   currentPage: number;
   setCurrentPage: (page: number) => void;
   itemsPerPage: number;
-  totalCount: number;
+  totalPages: number;
 }
 
 const StockTable: React.FC<StockTableProps> = ({
@@ -96,7 +96,7 @@ const StockTable: React.FC<StockTableProps> = ({
   currentPage,
   setCurrentPage,
   itemsPerPage,
-  totalCount
+  totalPages
 }) => {
   const getHeaderClass = (key: string) => 
     cn(
@@ -143,9 +143,6 @@ const StockTable: React.FC<StockTableProps> = ({
     // For now, just show strips. Later this can be enhanced with packaging unit conversion
     return `${strips} strips`;
   };
-
-  // Calculate total pages
-  const totalPages = Math.max(1, Math.ceil(totalCount / itemsPerPage));
 
   return (
     <Card className="rounded-lg border">
@@ -395,10 +392,10 @@ const StockTable: React.FC<StockTableProps> = ({
           </div>
         </div>
       </CardContent>
-      {totalCount > 0 && (
+      {totalPages > 0 && (
         <CardFooter className="flex items-center justify-between px-6 py-4 border-t">
           <div className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages} ({totalCount} items)
+            Page {currentPage} of {totalPages}
           </div>
           <div className="flex items-center space-x-2">
             <Button

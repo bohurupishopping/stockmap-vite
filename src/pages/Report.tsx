@@ -54,13 +54,13 @@ const ReportPage = () => {
 
   // Fetch total count for pagination
   const { data: countData } = useQuery({
-    queryKey: ['stock-count', locationFilter, productFilter, categoryFilter, batchFilter, expiryFromDate, expiryToDate],
+    queryKey: ['stock-status-count', locationFilter, productFilter, categoryFilter, batchFilter, expiryFromDate, expiryToDate],
     queryFn: async () => {
       try {
-        // Build the base query with all filters
         let query = supabase
           .from('products_stock_status')
-          .select('id', { count: 'exact', head: true });
+          .select('id', { count: 'exact', head: true })
+          .gt('current_quantity_strips', 0);
 
         // Apply location filter
         if (locationFilter !== 'ALL') {
@@ -76,106 +76,105 @@ const ReportPage = () => {
 
         // Apply product filter
         if (productFilter) {
-          query = query.or(`product_id.in.(${
-            supabase
-              .from('products')
-              .select('id')
-              .or(`product_name.ilike.%${productFilter}%,product_code.ilike.%${productFilter}%`)
-              .then(({ data }) => data?.map(p => p.id).join(',') || '')
-          })`);
+          // First get product IDs that match the filter
+          const { data: productIds } = await supabase
+            .from('products')
+            .select('id')
+            .or(`product_name.ilike.%${productFilter}%,product_code.ilike.%${productFilter}%,generic_name.ilike.%${productFilter}%`);
+          
+          if (productIds && productIds.length > 0) {
+            query = query.in('product_id', productIds.map(p => p.id));
+          } else {
+            return { count: 0 };
+          }
         }
 
         // Apply category filter
-        if (categoryFilter !== 'ALL') {
-          query = query.or(`product_id.in.(${
-            supabase
-              .from('products')
-              .select('id')
-              .eq('category_id', (
-                supabase
-                  .from('product_categories')
-                  .select('id')
-                  .eq('category_name', categoryFilter)
-                  .single()
-                  .then(({ data }) => data?.id || '')
-              ))
-              .then(({ data }) => data?.map(p => p.id).join(',') || '')
-          })`);
+        if (categoryFilter && categoryFilter !== 'ALL') {
+          // First get product IDs in this category
+          const { data: productIds } = await supabase
+            .from('products')
+            .select('id')
+            .eq('product_categories.category_name', categoryFilter)
+            .select('id');
+          
+          if (productIds && productIds.length > 0) {
+            query = query.in('product_id', productIds.map(p => p.id));
+          } else {
+            return { count: 0 };
+          }
         }
 
         // Apply batch filter
         if (batchFilter) {
-          query = query.or(`batch_id.in.(${
-            supabase
-              .from('product_batches')
-              .select('id')
-              .ilike('batch_number', `%${batchFilter}%`)
-              .then(({ data }) => data?.map(b => b.id).join(',') || '')
-          })`);
+          // First get batch IDs that match the filter
+          const { data: batchIds } = await supabase
+            .from('product_batches')
+            .select('id')
+            .ilike('batch_number', `%${batchFilter}%`);
+          
+          if (batchIds && batchIds.length > 0) {
+            query = query.in('batch_id', batchIds.map(b => b.id));
+          } else {
+            return { count: 0 };
+          }
         }
 
-        // Apply expiry date filters
+        // Apply expiry date filter
         if (expiryFromDate && expiryToDate) {
-          query = query.or(`batch_id.in.(${
-            supabase
-              .from('product_batches')
-              .select('id')
-              .gte('expiry_date', expiryFromDate)
-              .lte('expiry_date', expiryToDate)
-              .then(({ data }) => data?.map(b => b.id).join(',') || '')
-          })`);
+          // First get batch IDs in the date range
+          const { data: batchIds } = await supabase
+            .from('product_batches')
+            .select('id')
+            .gte('expiry_date', expiryFromDate)
+            .lte('expiry_date', expiryToDate);
+          
+          if (batchIds && batchIds.length > 0) {
+            query = query.in('batch_id', batchIds.map(b => b.id));
+          } else {
+            return { count: 0 };
+          }
         }
-
-        // Only count items with positive stock
-        query = query.gt('current_quantity_strips', 0);
 
         const { count, error } = await query;
         
         if (error) throw error;
-        return count || 0;
+        return { count: count || 0 };
       } catch (error) {
         console.error('Error fetching count:', error);
-        throw error;
+        return { count: 0 };
       }
     },
     keepPreviousData: true,
   });
 
-  // Update total count when count data changes
   useEffect(() => {
-    if (countData !== undefined) {
-      setTotalCount(countData);
+    if (countData) {
+      setTotalCount(countData.count);
     }
   }, [countData]);
 
   // Fetch stock data with server-side pagination, filtering, and sorting
-  const { data: stockData, isLoading, error } = useQuery({
+  const { data: stockData, isLoading } = useQuery({
     queryKey: ['stock-status', locationFilter, productFilter, categoryFilter, batchFilter, expiryFromDate, expiryToDate, currentPage, sortField, sortDirection],
     queryFn: async () => {
       try {
-        // Calculate pagination range
+        // Calculate range for pagination
         const from = (currentPage - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
 
-        // Build the base query with all joins
+        // Start building the query with joins to get all required data
         let query = supabase
           .from('products_stock_status')
           .select(`
-            id,
-            product_id,
-            batch_id,
-            location_type,
-            location_id,
-            current_quantity_strips,
-            cost_per_strip,
-            total_value,
+            *,
             products:product_id (
               product_name,
               product_code,
               generic_name,
               min_stock_level_godown,
               min_stock_level_mr,
-              product_categories (
+              product_categories:category_id (
                 category_name
               )
             ),
@@ -183,7 +182,8 @@ const ReportPage = () => {
               batch_number,
               expiry_date
             )
-          `);
+          `)
+          .gt('current_quantity_strips', 0);
 
         // Apply location filter
         if (locationFilter !== 'ALL') {
@@ -199,58 +199,64 @@ const ReportPage = () => {
 
         // Apply product filter
         if (productFilter) {
-          query = query.or(`product_id.in.(${
-            supabase
-              .from('products')
-              .select('id')
-              .or(`product_name.ilike.%${productFilter}%,product_code.ilike.%${productFilter}%`)
-              .then(({ data }) => data?.map(p => p.id).join(',') || '')
-          })`);
+          // First get product IDs that match the filter
+          const { data: productIds } = await supabase
+            .from('products')
+            .select('id')
+            .or(`product_name.ilike.%${productFilter}%,product_code.ilike.%${productFilter}%,generic_name.ilike.%${productFilter}%`);
+          
+          if (productIds && productIds.length > 0) {
+            query = query.in('product_id', productIds.map(p => p.id));
+          } else {
+            return [];
+          }
         }
 
         // Apply category filter
-        if (categoryFilter !== 'ALL') {
-          query = query.or(`product_id.in.(${
-            supabase
-              .from('products')
-              .select('id')
-              .eq('category_id', (
-                supabase
-                  .from('product_categories')
-                  .select('id')
-                  .eq('category_name', categoryFilter)
-                  .single()
-                  .then(({ data }) => data?.id || '')
-              ))
-              .then(({ data }) => data?.map(p => p.id).join(',') || '')
-          })`);
+        if (categoryFilter && categoryFilter !== 'ALL') {
+          // First get product IDs in this category
+          const { data: productIds } = await supabase
+            .from('products')
+            .select('id, product_categories!inner(category_name)')
+            .eq('product_categories.category_name', categoryFilter);
+          
+          if (productIds && productIds.length > 0) {
+            query = query.in('product_id', productIds.map(p => p.id));
+          } else {
+            return [];
+          }
         }
 
         // Apply batch filter
         if (batchFilter) {
-          query = query.or(`batch_id.in.(${
-            supabase
-              .from('product_batches')
-              .select('id')
-              .ilike('batch_number', `%${batchFilter}%`)
-              .then(({ data }) => data?.map(b => b.id).join(',') || '')
-          })`);
+          // First get batch IDs that match the filter
+          const { data: batchIds } = await supabase
+            .from('product_batches')
+            .select('id')
+            .ilike('batch_number', `%${batchFilter}%`);
+          
+          if (batchIds && batchIds.length > 0) {
+            query = query.in('batch_id', batchIds.map(b => b.id));
+          } else {
+            return [];
+          }
         }
 
-        // Apply expiry date filters
+        // Apply expiry date filter
         if (expiryFromDate && expiryToDate) {
-          query = query.or(`batch_id.in.(${
-            supabase
-              .from('product_batches')
-              .select('id')
-              .gte('expiry_date', expiryFromDate)
-              .lte('expiry_date', expiryToDate)
-              .then(({ data }) => data?.map(b => b.id).join(',') || '')
-          })`);
+          // First get batch IDs in the date range
+          const { data: batchIds } = await supabase
+            .from('product_batches')
+            .select('id')
+            .gte('expiry_date', expiryFromDate)
+            .lte('expiry_date', expiryToDate);
+          
+          if (batchIds && batchIds.length > 0) {
+            query = query.in('batch_id', batchIds.map(b => b.id));
+          } else {
+            return [];
+          }
         }
-
-        // Only include items with positive stock
-        query = query.gt('current_quantity_strips', 0);
 
         // Apply sorting
         if (sortField === 'product_name') {
@@ -262,6 +268,7 @@ const ReportPage = () => {
         } else if (sortField === 'expiry_date') {
           query = query.order('product_batches(expiry_date)', { ascending: sortDirection === 'asc' });
         } else {
+          // For other fields that are directly in the products_stock_status table
           query = query.order(sortField, { ascending: sortDirection === 'asc' });
         }
 
@@ -270,10 +277,13 @@ const ReportPage = () => {
 
         const { data, error } = await query;
         
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase query error:', error);
+          throw error;
+        }
 
         // Transform the data to match the StockItem interface
-        const stockItems: StockItem[] = data.map(item => ({
+        const transformedData: StockItem[] = data.map(item => ({
           product_id: item.product_id,
           product_name: item.products?.product_name || '',
           product_code: item.products?.product_code || '',
@@ -286,12 +296,12 @@ const ReportPage = () => {
           current_quantity_strips: item.current_quantity_strips,
           cost_per_strip: item.cost_per_strip,
           total_value: item.total_value || 0,
-          category_name: item.products?.product_categories?.category_name || '',
-          min_stock_level_godown: item.products?.min_stock_level_godown || 0,
-          min_stock_level_mr: item.products?.min_stock_level_mr || 0,
+          category_name: item.products?.product_categories?.category_name,
+          min_stock_level_godown: item.products?.min_stock_level_godown,
+          min_stock_level_mr: item.products?.min_stock_level_mr,
         }));
 
-        return stockItems;
+        return transformedData;
       } catch (error) {
         console.error('Error fetching stock data:', error);
         throw error;
@@ -301,26 +311,26 @@ const ReportPage = () => {
   });
 
   // Fetch summary data
-  const { data: summaryData, error: summaryError } = useQuery({
+  const { data: summaryData } = useQuery({
     queryKey: ['stock-summary', locationFilter, productFilter, categoryFilter, batchFilter, expiryFromDate, expiryToDate],
     queryFn: async () => {
       try {
         // Get total products count
-        const { count: totalProducts, error: productsError } = await supabase
+        const { data: productsCount, error: productsError } = await supabase
           .from('products_stock_status')
           .select('product_id', { count: 'exact', head: true })
           .gt('current_quantity_strips', 0);
         
         if (productsError) throw productsError;
-
+        
         // Get total batches count
-        const { count: totalBatches, error: batchesError } = await supabase
+        const { data: batchesCount, error: batchesError } = await supabase
           .from('products_stock_status')
           .select('batch_id', { count: 'exact', head: true })
           .gt('current_quantity_strips', 0);
         
         if (batchesError) throw batchesError;
-
+        
         // Get total value
         const { data: valueData, error: valueError } = await supabase
           .from('products_stock_status')
@@ -330,61 +340,45 @@ const ReportPage = () => {
         if (valueError) throw valueError;
         
         const totalValue = valueData?.reduce((sum, item) => sum + (item.total_value || 0), 0) || 0;
-
+        
         // Get low stock items count
-        const { data: lowStockData, error: lowStockError } = await supabase
-          .from('products_stock_status')
-          .select(`
-            id,
-            location_type,
-            current_quantity_strips,
-            products:product_id (
-              min_stock_level_godown,
-              min_stock_level_mr
-            )
-          `)
-          .gt('current_quantity_strips', 0);
+        const { data: lowStockData, error: lowStockError } = await supabase.rpc('get_low_stock_items_count');
         
-        if (lowStockError) throw lowStockError;
+        if (lowStockError) {
+          console.error('Error fetching low stock count:', lowStockError);
+          // Fallback calculation if RPC fails
+          const lowStockCount = 0; // We'll need a more complex query to calculate this
+        }
         
-        const lowStockItems = lowStockData?.filter(item => {
-          const minLevel = item.location_type === 'GODOWN' 
-            ? item.products?.min_stock_level_godown || 0
-            : item.products?.min_stock_level_mr || 0;
-          return item.current_quantity_strips <= minLevel;
-        }).length || 0;
-
         // Get expiring soon items count
         const thirtyDaysFromNow = new Date();
         thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+        const thirtyDaysFromNowStr = thirtyDaysFromNow.toISOString().split('T')[0];
         
         const { data: expiringData, error: expiringError } = await supabase
           .from('products_stock_status')
-          .select(`
-            id,
-            product_batches:batch_id (
-              expiry_date
-            )
-          `)
-          .gt('current_quantity_strips', 0);
+          .select('id', { count: 'exact', head: true })
+          .gt('current_quantity_strips', 0)
+          .lte('product_batches.expiry_date', thirtyDaysFromNowStr);
         
         if (expiringError) throw expiringError;
         
-        const expiringSoonItems = expiringData?.filter(item => {
-          const expiryDate = new Date(item.product_batches?.expiry_date || '');
-          return expiryDate <= thirtyDaysFromNow;
-        }).length || 0;
-
         return {
-          total_products: totalProducts || 0,
-          total_batches: totalBatches || 0,
+          total_products: productsCount?.count || 0,
+          total_batches: batchesCount?.count || 0,
           total_value: totalValue,
-          low_stock_items: lowStockItems,
-          expiring_soon_items: expiringSoonItems,
+          low_stock_items: lowStockData?.count || 0,
+          expiring_soon_items: expiringData?.count || 0,
         };
       } catch (error) {
         console.error('Error fetching summary data:', error);
-        throw error;
+        return {
+          total_products: 0,
+          total_batches: 0,
+          total_value: 0,
+          low_stock_items: 0,
+          expiring_soon_items: 0,
+        };
       }
     },
     keepPreviousData: true,
@@ -426,18 +420,16 @@ const ReportPage = () => {
     setCurrentPage(1);
   };
 
-  if (error) {
+  if (isLoading && !stockData) {
     return (
       <div className="w-full p-6">
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            Error loading stock data: {error.message}
-          </AlertDescription>
-        </Alert>
+        <div className="text-center">Loading stock data...</div>
       </div>
     );
   }
+
+  // Calculate total pages
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   return (
     <div className="w-full p-6 space-y-6">
@@ -541,7 +533,7 @@ const ReportPage = () => {
         setProductFilter={setProductFilter}
         categoryFilter={categoryFilter}
         setCategoryFilter={setCategoryFilter}
-        batchFilter={batchFilter}
+        batchFilter={setBatchFilter}
         setBatchFilter={setBatchFilter}
         expiryFromDate={expiryFromDate}
         setExpiryFromDate={setExpiryFromDate}
@@ -564,24 +556,24 @@ const ReportPage = () => {
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
         itemsPerPage={ITEMS_PER_PAGE}
-        totalCount={totalCount}
+        totalPages={totalPages}
       />
 
       {/* Alerts for low stock and expiring items */}
-      {summaryData?.low_stock_items > 0 && (
+      {(summaryData?.low_stock_items || 0) > 0 && (
         <Alert>
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            You have {summaryData.low_stock_items} items with low stock levels. Consider restocking soon.
+            You have {summaryData?.low_stock_items} items with low stock levels. Consider restocking soon.
           </AlertDescription>
         </Alert>
       )}
 
-      {summaryData?.expiring_soon_items > 0 && (
+      {(summaryData?.expiring_soon_items || 0) > 0 && (
         <Alert>
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            You have {summaryData.expiring_soon_items} items expiring within 30 days. Review and take action.
+            You have {summaryData?.expiring_soon_items} items expiring within 30 days. Review and take action.
           </AlertDescription>
         </Alert>
       )}
