@@ -1,22 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Package, TrendingDown, AlertTriangle, DollarSign, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Package, TrendingDown, AlertTriangle, DollarSign, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import ProductTableColumns from '@/components/products/ProductTableColumns';
 import StockFilters from '@/components/report/StockFilters';
 import StockTable, { 
   StockItem, 
-  StockColumnConfig, 
   defaultStockColumns, 
   SortField, 
   SortDirection 
