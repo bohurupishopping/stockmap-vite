@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,8 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Save, X } from 'lucide-react';
 import { ProductPackagingUnit } from '@/components/products/ProductPackaging';
+import { Database } from '@/integrations/supabase/types';
+
+type PackagingTemplate = Database['public']['Tables']['packaging_templates']['Row'];
 
 interface PackagingUnitModalProps {
   isOpen: boolean;
@@ -43,7 +46,32 @@ const PackagingUnitModal = ({
     default_purchase_unit: false,
     default_sales_unit_mr: false,
     default_sales_unit_direct: false,
+    template_id: null as string | null,
   });
+
+  // Fetch packaging templates
+  const { data: packagingTemplates } = useQuery({
+    queryKey: ['packaging-templates'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('packaging_templates')
+        .select('*')
+        .order('template_name', { ascending: true })
+        .order('order_in_hierarchy', { ascending: true });
+      if (error) throw error;
+      return data as PackagingTemplate[];
+    },
+    enabled: isOpen,
+  });
+
+  // Group templates by template_name
+  const groupedTemplates = packagingTemplates?.reduce((acc, template) => {
+    if (!acc[template.template_name]) {
+      acc[template.template_name] = [];
+    }
+    acc[template.template_name].push(template);
+    return acc;
+  }, {} as Record<string, PackagingTemplate[]>) ?? {};
 
   // Get the product's base unit info
   const { data: baseUnit } = useQuery({
@@ -88,19 +116,35 @@ const PackagingUnitModal = ({
         default_purchase_unit: editingUnit.default_purchase_unit,
         default_sales_unit_mr: editingUnit.default_sales_unit_mr,
         default_sales_unit_direct: editingUnit.default_sales_unit_direct,
+        template_id: editingUnit.template_id,
       });
     } else {
       setFormData({
         unit_name: '',
         conversion_factor_to_strips: 1,
-        is_base_unit: !baseUnit, // If no base unit exists, make this the base unit
+        is_base_unit: !baseUnit,
         order_in_hierarchy: nextOrder || 1,
         default_purchase_unit: false,
         default_sales_unit_mr: false,
         default_sales_unit_direct: false,
+        template_id: null,
       });
     }
   }, [editingUnit, baseUnit, nextOrder]);
+
+  const handleTemplateSelect = (templateId: string) => {
+    const template = packagingTemplates?.find(t => t.id === templateId);
+    if (template) {
+      setFormData(prev => ({
+        ...prev,
+        template_id: template.id,
+        unit_name: template.unit_name,
+        conversion_factor_to_strips: template.conversion_factor_to_strips,
+        is_base_unit: template.is_base_unit,
+        order_in_hierarchy: template.order_in_hierarchy,
+      }));
+    }
+  };
 
   const saveUnitMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
@@ -113,6 +157,7 @@ const PackagingUnitModal = ({
         default_purchase_unit: data.default_purchase_unit,
         default_sales_unit_mr: data.default_sales_unit_mr,
         default_sales_unit_direct: data.default_sales_unit_direct,
+        template_id: data.template_id,
       };
 
       if (isEdit) {
@@ -200,6 +245,34 @@ const PackagingUnitModal = ({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!isEdit && (
+            <div>
+              <Label>Use Template (Optional)</Label>
+              <Select
+                value={formData.template_id || ''}
+                onValueChange={handleTemplateSelect}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a template..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(groupedTemplates).map(([templateName, templates]) => (
+                    <div key={templateName}>
+                      <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">
+                        {templateName}
+                      </div>
+                      {templates.map(template => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.unit_name} ({template.conversion_factor_to_strips} strips)
+                        </SelectItem>
+                      ))}
+                    </div>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div>
             <Label htmlFor="unit_name">Unit Name *</Label>
             <Input

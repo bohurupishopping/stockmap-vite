@@ -8,6 +8,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
+import { Database } from '@/integrations/supabase/types';
+
+type PackagingTemplate = Database['public']['Tables']['packaging_templates']['Row'];
 
 interface BasicProductInfoProps {
   formData: any;
@@ -37,6 +40,29 @@ const BasicProductInfo = ({
       return data;
     },
   });
+
+  // Fetch packaging templates
+  const { data: packagingTemplates } = useQuery({
+    queryKey: ['packaging-templates'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('packaging_templates')
+        .select('*')
+        .order('template_name', { ascending: true })
+        .order('order_in_hierarchy', { ascending: true });
+      if (error) throw error;
+      return data as PackagingTemplate[];
+    },
+  });
+
+  // Group templates by template_name
+  const groupedTemplates = packagingTemplates?.reduce((acc, template) => {
+    if (!acc[template.template_name]) {
+      acc[template.template_name] = [];
+    }
+    acc[template.template_name].push(template);
+    return acc;
+  }, {} as Record<string, PackagingTemplate[]>) ?? {};
 
   // Fetch sub-categories based on selected category
   const { data: subCategories } = useQuery({
@@ -80,6 +106,29 @@ const BasicProductInfo = ({
     // Convert "none" back to empty string for the database
     const subCategoryId = value === "none" ? '' : value;
     updateFormData({ sub_category_id: subCategoryId });
+  };
+
+  const handleTemplateChange = (templateName: string) => {
+    if (!packagingTemplates) return;
+
+    // Find all units for this template
+    const templateUnits = packagingTemplates.filter(t => t.template_name === templateName);
+    
+    // Update form data with the selected template units
+    updateFormData({ 
+      selected_packaging_template_name: templateName,
+      packaging_units: templateUnits.map(unit => ({
+        unit_name: unit.unit_name,
+        conversion_factor_to_strips: unit.conversion_factor_to_strips,
+        is_base_unit: unit.is_base_unit,
+        order_in_hierarchy: unit.order_in_hierarchy,
+        template_id: unit.id,
+        // Set reasonable defaults for the other fields
+        default_purchase_unit: unit.order_in_hierarchy === 2, // Usually the second unit (e.g., Box)
+        default_sales_unit_mr: unit.order_in_hierarchy === 2, // Usually the second unit
+        default_sales_unit_direct: unit.order_in_hierarchy === 1, // Usually the base unit
+      }))
+    });
   };
 
   return (
@@ -220,6 +269,25 @@ const BasicProductInfo = ({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="packaging_template">Packaging Template</Label>
+          <Select value={formData.selected_packaging_template_name || ''} onValueChange={handleTemplateChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a packaging template" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.keys(groupedTemplates).map((templateName) => (
+                <SelectItem key={templateName} value={templateName}>
+                  {templateName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-gray-500">
+            Select a template to automatically set up packaging units
+          </p>
         </div>
 
         <div className="space-y-2">

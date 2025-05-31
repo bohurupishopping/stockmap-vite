@@ -384,6 +384,7 @@ export type Database = {
           product_id: string
           unit_name: string
           updated_at: string
+          template_id: string | null
         }
         Insert: {
           conversion_factor_to_strips?: number
@@ -397,6 +398,7 @@ export type Database = {
           product_id: string
           unit_name: string
           updated_at?: string
+          template_id?: string | null
         }
         Update: {
           conversion_factor_to_strips?: number
@@ -410,6 +412,7 @@ export type Database = {
           product_id?: string
           unit_name?: string
           updated_at?: string
+          template_id?: string | null
         }
         Relationships: [
           {
@@ -419,6 +422,13 @@ export type Database = {
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "product_packaging_units_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "packaging_templates"
+            referencedColumns: ["id"]
+          }
         ]
       }
       product_sub_categories: {
@@ -741,6 +751,39 @@ export type Database = {
           phone?: string | null
           supplier_code?: string | null
           supplier_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      packaging_templates: {
+        Row: {
+          id: string
+          template_name: string
+          unit_name: string
+          conversion_factor_to_strips: number
+          is_base_unit: boolean
+          order_in_hierarchy: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          template_name: string
+          unit_name: string
+          conversion_factor_to_strips?: number
+          is_base_unit?: boolean
+          order_in_hierarchy: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          template_name?: string
+          unit_name?: string
+          conversion_factor_to_strips?: number
+          is_base_unit?: boolean
+          order_in_hierarchy?: number
+          created_at?: string
           updated_at?: string
         }
         Relationships: []

@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -15,6 +14,7 @@ import Products from "./pages/Products";
 import ProductForm from "./components/products/ProductForm";
 import ProductPackaging from "./components/products/ProductPackaging";
 import ProductBatches from "./components/products/ProductBatches";
+import PackagingTemplates from "./pages/PackagingTemplates";
 import StockMovements from "./pages/StockMovements";
 import Purchase from "./pages/Purchase";
 import NewPurchase from "./components/purchase/NewPurchase";
@@ -104,6 +104,14 @@ const App = () => (
               element={
                 <ProtectedRoute requireAdmin={true}>
                   <ProductBatches />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/packaging-templates" 
+              element={
+                <ProtectedRoute requireAdmin={true}>
+                  <PackagingTemplates />
                 </ProtectedRoute>
               } 
             />

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -65,8 +64,12 @@ const Sidebar = ({ isCollapsed, onToggle }: SidebarProps) => {
           href: "/admin/products",
           color: "text-emerald-600"
         },
-       
-        
+        {
+          title: "Packaging Templates",
+          icon: Beaker,
+          href: "/admin/packaging-templates",
+          color: "text-emerald-600"
+        },
       ]
     },
     {

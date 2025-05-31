@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -19,6 +18,7 @@ export interface ProductPackagingUnit {
   default_purchase_unit: boolean;
   default_sales_unit_mr: boolean;
   default_sales_unit_direct: boolean;
+  template_id: string | null;
   created_at: string;
   updated_at: string;
 }

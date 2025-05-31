@@ -1,13 +1,15 @@
-
 import React from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Edit, Trash2 } from 'lucide-react';
+import { Edit, Trash2, Copy } from 'lucide-react';
 import { ProductPackagingUnit } from '@/components/products/ProductPackaging';
+import { Database } from '@/integrations/supabase/types';
+
+type PackagingTemplate = Database['public']['Tables']['packaging_templates']['Row'];
 
 interface PackagingUnitsTableProps {
   packagingUnits: ProductPackagingUnit[];
@@ -25,6 +27,18 @@ const PackagingUnitsTable = ({
   productId 
 }: PackagingUnitsTableProps) => {
   const { toast } = useToast();
+
+  // Fetch templates for reference
+  const { data: templates } = useQuery({
+    queryKey: ['packaging-templates'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('packaging_templates')
+        .select('*');
+      if (error) throw error;
+      return data as PackagingTemplate[];
+    },
+  });
 
   const deleteUnitMutation = useMutation({
     mutationFn: async (unitId: string) => {
@@ -65,6 +79,12 @@ const PackagingUnitsTable = ({
     }
   };
 
+  const getTemplateInfo = (unit: ProductPackagingUnit) => {
+    if (!unit.template_id || !templates) return null;
+    const template = templates.find(t => t.id === unit.template_id);
+    return template ? `${template.template_name} Template` : null;
+  };
+
   if (isLoading) {
     return (
       <div className="text-center py-8">
@@ -87,6 +107,7 @@ const PackagingUnitsTable = ({
         <TableHeader>
           <TableRow>
             <TableHead>Unit Name</TableHead>
+            <TableHead>Template</TableHead>
             <TableHead>Strips in this Unit</TableHead>
             <TableHead>Is Base Unit?</TableHead>
             <TableHead>Hierarchy Order</TableHead>
@@ -100,6 +121,13 @@ const PackagingUnitsTable = ({
           {packagingUnits.map((unit) => (
             <TableRow key={unit.id}>
               <TableCell className="font-medium">{unit.unit_name}</TableCell>
+              <TableCell>
+                {getTemplateInfo(unit) && (
+                  <Badge variant="secondary">
+                    {getTemplateInfo(unit)}
+                  </Badge>
+                )}
+              </TableCell>
               <TableCell>{unit.conversion_factor_to_strips}</TableCell>
               <TableCell>
                 <Badge variant={unit.is_base_unit ? "default" : "secondary"}>
