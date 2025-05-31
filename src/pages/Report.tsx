@@ -14,7 +14,7 @@ import StockTable, {
   SortDirection 
 } from '@/components/report/StockTable';
 
-const ITEMS_PER_PAGE = 50;
+const ITEMS_PER_PAGE = 20;
 
 interface StockSummary {
   total_products: number;
@@ -36,9 +36,6 @@ const ReportPage = () => {
   const [sortField, setSortField] = useState<SortField>('product_name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
-  // State for total count (for pagination)
-  const [totalCount, setTotalCount] = useState(0);
-
   const handleColumnToggle = (columns: Record<string, boolean>) => {
     setVisibleColumns(columns);
   };
@@ -54,228 +51,419 @@ const ReportPage = () => {
     setCurrentPage(1);
   };
 
-  // Fetch stock data with server-side pagination, filtering, and sorting
+  // Fetch stock data with proper calculation
   const { data: stockData, isLoading } = useQuery({
-    queryKey: ['stock-status', locationFilter, productFilter, categoryFilter, batchFilter, expiryFromDate, expiryToDate, currentPage, sortField, sortDirection],
+    queryKey: ['stock-status', locationFilter, productFilter, categoryFilter, batchFilter, expiryFromDate, expiryToDate],
     queryFn: async () => {
       try {
-        // Build query for products_stock_status table with joins
-        let query = supabase
-          .from('products_stock_status')
+        // First, fetch all products for later lookup
+        const { data: products, error: productsError } = await supabase
+          .from('products')
           .select(`
-            *,
-            products:product_id (
-              product_name,
-              product_code,
-              generic_name,
-              min_stock_level_godown,
-              min_stock_level_mr,
-              product_categories (
-                category_name
-              )
-            ),
-            product_batches:batch_id (
-              batch_number,
-              expiry_date
+            id,
+            product_name,
+            product_code,
+            generic_name,
+            min_stock_level_godown,
+            min_stock_level_mr,
+            product_categories (
+              category_name
             )
-          `, { count: 'exact' });
+          `);
+        
+        if (productsError) {
+          console.error('Error fetching products:', productsError);
+          throw productsError;
+        }
+        
+        // Create a map of products for quick lookup
+        const productMap = new Map();
+        products?.forEach(product => {
+          productMap.set(product.id, product);
+        });
+        
+        // Fetch all batches for later lookup
+        const { data: batches, error: batchesError } = await supabase
+          .from('product_batches')
+          .select(`
+            id,
+            batch_number,
+            expiry_date
+          `);
+        
+        if (batchesError) {
+          console.error('Error fetching batches:', batchesError);
+          throw batchesError;
+        }
+        
+        // Create a map of batches for quick lookup
+        const batchMap = new Map();
+        batches?.forEach(batch => {
+          batchMap.set(batch.id, batch);
+        });
 
-        // Apply location filter
-        if (locationFilter !== 'ALL') {
-          if (locationFilter === 'GODOWN') {
-            query = query.eq('location_type', 'GODOWN');
-          } else if (locationFilter === 'MR') {
-            query = query.eq('location_type', 'MR');
-          } else if (locationFilter.startsWith('MR_')) {
-            const mrId = locationFilter.replace('MR_', '');
-            query = query.eq('location_type', 'MR').eq('location_id', mrId);
+        // Build query for transactions
+        let query = supabase
+          .from('stock_transactions_view')
+          .select(`
+            product_id,
+            batch_id,
+            transaction_type,
+            quantity_strips,
+            location_type_source,
+            location_id_source,
+            location_type_destination,
+            location_id_destination,
+            cost_per_strip_at_transaction,
+            transaction_date
+          `);
+
+        // Apply filters
+        if (productFilter) {
+          // Get product IDs that match the filter
+          const filteredProductIds = products
+            ?.filter(p => 
+              p.product_name.toLowerCase().includes(productFilter.toLowerCase()) || 
+              p.product_code.toLowerCase().includes(productFilter.toLowerCase())
+            )
+            .map(p => p.id);
+          
+          if (filteredProductIds && filteredProductIds.length > 0) {
+            query = query.in('product_id', filteredProductIds);
+          } else {
+            // No products match the filter, return empty result
+            return [];
           }
         }
 
-        // Apply product filter (search by name or code)
-        if (productFilter) {
-          query = query.or(`products.product_name.ilike.%${productFilter}%,products.product_code.ilike.%${productFilter}%`);
-        }
-
-        // Apply category filter
-        if (categoryFilter && categoryFilter !== 'ALL') {
-          query = query.eq('products.product_categories.category_name', categoryFilter);
-        }
-
-        // Apply batch filter
         if (batchFilter) {
-          query = query.ilike('product_batches.batch_number', `%${batchFilter}%`);
+          // Get batch IDs that match the filter
+          const filteredBatchIds = batches
+            ?.filter(b => b.batch_number.toLowerCase().includes(batchFilter.toLowerCase()))
+            .map(b => b.id);
+          
+          if (filteredBatchIds && filteredBatchIds.length > 0) {
+            query = query.in('batch_id', filteredBatchIds);
+          } else {
+            // No batches match the filter, return empty result
+            return [];
+          }
         }
 
-        // Apply expiry date range filter
         if (expiryFromDate && expiryToDate) {
-          query = query
-            .gte('product_batches.expiry_date', expiryFromDate)
-            .lte('product_batches.expiry_date', expiryToDate);
+          // Get batch IDs that match the expiry date range
+          const filteredBatchIds = batches
+            ?.filter(b => {
+              const expiryDate = new Date(b.expiry_date);
+              const fromDate = new Date(expiryFromDate);
+              const toDate = new Date(expiryToDate);
+              return expiryDate >= fromDate && expiryDate <= toDate;
+            })
+            .map(b => b.id);
+          
+          if (filteredBatchIds && filteredBatchIds.length > 0) {
+            query = query.in('batch_id', filteredBatchIds);
+          } else {
+            // No batches match the filter, return empty result
+            return [];
+          }
         }
 
-        // Filter out zero or negative stock
-        query = query.gt('current_quantity_strips', 0);
 
-        // Get total count before applying pagination
-        const { count } = await query.count();
-        setTotalCount(count || 0);
-
-        // Apply sorting
-        query = query.order(sortField, { ascending: sortDirection === 'asc' });
-
-        // Apply pagination
-        const from = (currentPage - 1) * ITEMS_PER_PAGE;
-        const to = from + ITEMS_PER_PAGE - 1;
-        query = query.range(from, to);
-
-        // Execute the query
-        const { data, error } = await query;
+        const { data: transactions, error } = await query;
         
         if (error) {
           console.error('Supabase query error:', error);
           throw error;
         }
+        
 
-        // Map the data to the StockItem interface
-        const stockItems: StockItem[] = data.map(item => {
-          const product = item.products;
-          const batch = item.product_batches;
-          
-          return {
-            product_id: item.product_id,
-            product_name: product?.product_name || '',
-            product_code: product?.product_code || '',
-            generic_name: product?.generic_name || '',
-            batch_id: item.batch_id,
-            batch_number: batch?.batch_number || '',
-            expiry_date: batch?.expiry_date || '',
-            location_type: item.location_type,
-            location_id: item.location_id,
-            current_quantity_strips: item.current_quantity_strips,
-            cost_per_strip: item.cost_per_strip,
-            total_value: item.current_quantity_strips * item.cost_per_strip,
-            category_name: product?.product_categories?.category_name,
-            min_stock_level_godown: product?.min_stock_level_godown || 0,
-            min_stock_level_mr: product?.min_stock_level_mr || 0,
-          };
+        // Apply category filter if needed
+        let filteredData = transactions || [];
+        if (categoryFilter && categoryFilter !== 'ALL') {
+
+          filteredData = filteredData.filter(tx => {
+            const product = productMap.get(tx.product_id);
+            if (!product || !product.product_categories) return false;
+            
+            // Handle both array and object responses from Supabase
+            const categories = Array.isArray(product.product_categories) 
+              ? product.product_categories 
+              : [product.product_categories];
+            
+            return categories.some((cat: any) => cat.category_name === categoryFilter);
+          });
+
+        }
+
+        // Calculate actual stock by processing all transactions
+        const stockMap = new Map<string, StockItem>();
+
+        filteredData.forEach((transaction: any) => {
+          try {
+            // Get product and batch data from our maps
+            const product = productMap.get(transaction.product_id);
+            const batch = batchMap.get(transaction.batch_id);
+            
+            // Skip transactions with missing related data
+            if (!product || !batch) {
+
+              return;
+            }
+            
+            // Helper function to get or create a stock item entry
+            const getOrCreateStockItem = (productId: string, batchId: string, locationType: string, locationId: string) => {
+              const key = `${productId}_${batchId}_${locationType}_${locationId}`;
+              
+              if (!stockMap.has(key)) {
+                // Handle both array and object responses from Supabase
+                const categories = Array.isArray(product.product_categories) 
+                  ? product.product_categories 
+                  : product.product_categories ? [product.product_categories] : [];
+                
+                stockMap.set(key, {
+                  product_id: productId,
+                  product_name: product.product_name,
+                  product_code: product.product_code,
+                  generic_name: product.generic_name,
+                  batch_id: batchId,
+                  batch_number: batch.batch_number,
+                  expiry_date: batch.expiry_date,
+                  location_type: locationType,
+                  location_id: locationId,
+                  current_quantity_strips: 0,
+                  cost_per_strip: transaction.cost_per_strip_at_transaction,
+                  total_value: 0,
+                  category_name: categories[0]?.category_name,
+                  min_stock_level_godown: product.min_stock_level_godown,
+                  min_stock_level_mr: product.min_stock_level_mr,
+                });
+              }
+              
+              return stockMap.get(key)!;
+            };
+            
+            // Process based on transaction type
+            const txType = transaction.transaction_type;
+            
+            // Determine the location and direction of stock movement
+            let stockLocation: string | null = null;
+            let stockLocationId: string | null = null;
+            let quantityChange = 0;
+            
+            // Process based on transaction type to determine the correct stock location and quantity change
+            if (txType === 'STOCK_IN_GODOWN') {
+              // Stock coming into godown (positive)
+              stockLocation = 'GODOWN';
+              stockLocationId = '';
+              quantityChange = transaction.quantity_strips; // Positive for inflow
+            }
+            else if (txType === 'DISPATCH_TO_MR') {
+              // For dispatch, we have two effects:
+              // 1. Decrease in godown stock
+              if (transaction.location_type_source === 'GODOWN') {
+                // Only process if we're interested in godown or all locations
+                if (locationFilter === 'ALL' || locationFilter === 'GODOWN') {
+                  const godownItem = getOrCreateStockItem(
+                    transaction.product_id,
+                    transaction.batch_id,
+                    'GODOWN',
+                    ''
+                  );
+                  godownItem.current_quantity_strips -= transaction.quantity_strips;
+                }
+              }
+              
+              // 2. Increase in MR stock
+              if (transaction.location_type_destination === 'MR' && transaction.location_id_destination) {
+                // Only process if we're interested in this MR or all MRs or all locations
+                const mrId = transaction.location_id_destination;
+                if (locationFilter === 'ALL' || 
+                    locationFilter === 'MR' || 
+                    (locationFilter.startsWith('MR_') && locationFilter.replace('MR_', '') === mrId)) {
+                  const mrItem = getOrCreateStockItem(
+                    transaction.product_id,
+                    transaction.batch_id,
+                    'MR',
+                    mrId
+                  );
+                  mrItem.current_quantity_strips += transaction.quantity_strips;
+                  mrItem.cost_per_strip = transaction.cost_per_strip_at_transaction;
+                }
+              }
+              
+              // Skip the default processing since we've handled both sides
+              return;
+            }
+            else if (txType === 'SALE_DIRECT_GODOWN') {
+              // Sale directly from godown (negative for godown)
+              if (transaction.location_type_source === 'GODOWN') {
+                stockLocation = 'GODOWN';
+                stockLocationId = '';
+                quantityChange = -transaction.quantity_strips; // Negative for outflow
+              }
+            }
+            else if (txType === 'SALE_BY_MR') {
+              // Sale by MR (negative for MR)
+              if (transaction.location_type_source === 'MR' && transaction.location_id_source) {
+                stockLocation = 'MR';
+                stockLocationId = transaction.location_id_source;
+                quantityChange = -transaction.quantity_strips; // Negative for outflow
+              }
+            }
+            else if (txType.includes('RETURN_TO_GODOWN')) {
+              // Return to godown (positive for godown, negative for source if MR)
+              if (transaction.location_type_destination === 'GODOWN') {
+                // Add to godown
+                if (locationFilter === 'ALL' || locationFilter === 'GODOWN') {
+                  const godownItem = getOrCreateStockItem(
+                    transaction.product_id,
+                    transaction.batch_id,
+                    'GODOWN',
+                    ''
+                  );
+                  godownItem.current_quantity_strips += transaction.quantity_strips;
+                  godownItem.cost_per_strip = transaction.cost_per_strip_at_transaction;
+                }
+              }
+              
+              // Remove from MR if that's the source
+              if (transaction.location_type_source === 'MR' && transaction.location_id_source) {
+                const mrId = transaction.location_id_source;
+                if (locationFilter === 'ALL' || 
+                    locationFilter === 'MR' || 
+                    (locationFilter.startsWith('MR_') && locationFilter.replace('MR_', '') === mrId)) {
+                  const mrItem = getOrCreateStockItem(
+                    transaction.product_id,
+                    transaction.batch_id,
+                    'MR',
+                    mrId
+                  );
+                  mrItem.current_quantity_strips -= transaction.quantity_strips;
+                }
+              }
+              
+              // Skip default processing
+              return;
+            }
+            else if (txType.includes('ADJUST_DAMAGE_') || 
+                     txType.includes('ADJUST_LOSS_') || 
+                     txType.includes('ADJUST_EXPIRED_')) {
+              // Adjustments for damage/loss/expiry (negative)
+              if (txType.includes('_GODOWN')) {
+                stockLocation = 'GODOWN';
+                stockLocationId = '';
+              } else if (txType.includes('_MR') && transaction.location_id_source) {
+                stockLocation = 'MR';
+                stockLocationId = transaction.location_id_source;
+              }
+              
+              if (stockLocation) {
+                quantityChange = -transaction.quantity_strips; // Negative for outflow
+              }
+            }
+            else if (txType.includes('OPENING_STOCK_')) {
+              // Opening stock (positive)
+              if (txType.includes('OPENING_STOCK_GODOWN')) {
+                stockLocation = 'GODOWN';
+                stockLocationId = '';
+              } else if (txType.includes('OPENING_STOCK_MR') && transaction.location_id_destination) {
+                stockLocation = 'MR';
+                stockLocationId = transaction.location_id_destination;
+              }
+              
+              if (stockLocation) {
+                quantityChange = transaction.quantity_strips; // Positive for inflow
+              }
+            }
+            else if (txType.includes('REPLACEMENT_')) {
+              // Handle replacements
+              if (txType.includes('REPLACEMENT_FROM_GODOWN')) {
+                // Outflow from godown
+                if (locationFilter === 'ALL' || locationFilter === 'GODOWN') {
+                  const godownItem = getOrCreateStockItem(
+                    transaction.product_id,
+                    transaction.batch_id,
+                    'GODOWN',
+                    ''
+                  );
+                  godownItem.current_quantity_strips -= transaction.quantity_strips;
+                }
+              } 
+              else if (txType.includes('REPLACEMENT_FROM_MR') && transaction.location_id_source) {
+                // Outflow from MR
+                const mrId = transaction.location_id_source;
+                if (locationFilter === 'ALL' || 
+                    locationFilter === 'MR' || 
+                    (locationFilter.startsWith('MR_') && locationFilter.replace('MR_', '') === mrId)) {
+                  const mrItem = getOrCreateStockItem(
+                    transaction.product_id,
+                    transaction.batch_id,
+                    'MR',
+                    mrId
+                  );
+                  mrItem.current_quantity_strips -= transaction.quantity_strips;
+                }
+              }
+              
+              // Skip default processing
+              return;
+            }
+            
+            // Apply the stock change if we determined a location and quantity change
+            if (stockLocation && quantityChange !== 0) {
+              // Apply location filter
+              if (stockLocation === 'GODOWN' && locationFilter !== 'ALL' && locationFilter !== 'GODOWN') {
+                return;
+              }
+              
+              if (stockLocation === 'MR') {
+                if (locationFilter !== 'ALL' && locationFilter !== 'MR' && 
+                    !(locationFilter.startsWith('MR_') && locationFilter.replace('MR_', '') === stockLocationId)) {
+                  return;
+                }
+              }
+              
+              const stockItem = getOrCreateStockItem(
+                transaction.product_id,
+                transaction.batch_id,
+                stockLocation,
+                stockLocationId || ''
+              );
+              
+              stockItem.current_quantity_strips += quantityChange;
+              
+              // Update cost per strip for inflows
+              if (quantityChange > 0) {
+                stockItem.cost_per_strip = transaction.cost_per_strip_at_transaction;
+              }
+            }
+          } catch (err) {
+            console.error('Error processing transaction:', err, transaction);
+          }
         });
+
+        // Calculate total value and filter out zero/negative stock items
+        const stockItems = Array.from(stockMap.values())
+          .filter(item => item.current_quantity_strips > 0)
+          .map(item => ({
+            ...item,
+            total_value: item.current_quantity_strips * item.cost_per_strip
+          }));
+
+        // Filter stock items by location type for internal use
+        const godownItems = stockItems.filter(item => item.location_type === 'GODOWN');
+        const mrItems = stockItems.filter(item => item.location_type === 'MR');
         
         return stockItems;
       } catch (error) {
-        console.error('Error fetching stock data:', error);
+
         throw error;
       }
     },
   });
 
-  // Fetch summary data with server-side aggregation
-  const { data: summaryData } = useQuery({
-    queryKey: ['stock-summary', locationFilter, productFilter, categoryFilter, batchFilter, expiryFromDate, expiryToDate],
-    queryFn: async () => {
-      try {
-        // Build base query with the same filters as the main query
-        let query = supabase
-          .from('products_stock_status')
-          .select(`
-            product_id,
-            batch_id,
-            current_quantity_strips,
-            cost_per_strip,
-            location_type,
-            products:product_id (
-              min_stock_level_godown,
-              min_stock_level_mr
-            ),
-            product_batches:batch_id (
-              expiry_date
-            )
-          `);
-
-        // Apply the same filters as the main query
-        if (locationFilter !== 'ALL') {
-          if (locationFilter === 'GODOWN') {
-            query = query.eq('location_type', 'GODOWN');
-          } else if (locationFilter === 'MR') {
-            query = query.eq('location_type', 'MR');
-          } else if (locationFilter.startsWith('MR_')) {
-            const mrId = locationFilter.replace('MR_', '');
-            query = query.eq('location_type', 'MR').eq('location_id', mrId);
-          }
-        }
-
-        if (productFilter) {
-          query = query.or(`products.product_name.ilike.%${productFilter}%,products.product_code.ilike.%${productFilter}%`);
-        }
-
-        if (categoryFilter && categoryFilter !== 'ALL') {
-          query = query.eq('products.product_categories.category_name', categoryFilter);
-        }
-
-        if (batchFilter) {
-          query = query.ilike('product_batches.batch_number', `%${batchFilter}%`);
-        }
-
-        if (expiryFromDate && expiryToDate) {
-          query = query
-            .gte('product_batches.expiry_date', expiryFromDate)
-            .lte('product_batches.expiry_date', expiryToDate);
-        }
-
-        // Filter out zero or negative stock
-        query = query.gt('current_quantity_strips', 0);
-
-        // Execute the query
-        const { data, error } = await query;
-        
-        if (error) {
-          console.error('Supabase summary query error:', error);
-          throw error;
-        }
-
-        // Calculate summary statistics
-        const uniqueProducts = new Set(data.map(item => item.product_id));
-        const uniqueBatches = new Set(data.map(item => item.batch_id));
-        const totalValue = data.reduce((sum, item) => sum + (item.current_quantity_strips * item.cost_per_strip), 0);
-
-        // Calculate items with low stock
-        const lowStockItems = data.filter(item => {
-          const minLevel = item.location_type === 'GODOWN' 
-            ? item.products?.min_stock_level_godown || 0
-            : item.products?.min_stock_level_mr || 0;
-          return item.current_quantity_strips <= minLevel;
-        }).length;
-
-        // Calculate items expiring in next 30 days
-        const thirtyDaysFromNow = new Date();
-        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-        const expiringSoonItems = data.filter(item => {
-          if (!item.product_batches?.expiry_date) return false;
-          const expiryDate = new Date(item.product_batches.expiry_date);
-          return expiryDate <= thirtyDaysFromNow;
-        }).length;
-
-        return {
-          total_products: uniqueProducts.size,
-          total_batches: uniqueBatches.size,
-          total_value: totalValue,
-          low_stock_items: lowStockItems,
-          expiring_soon_items: expiringSoonItems,
-        };
-      } catch (error) {
-        console.error('Error fetching summary data:', error);
-        return {
-          total_products: 0,
-          total_batches: 0,
-          total_value: 0,
-          low_stock_items: 0,
-          expiring_soon_items: 0,
-        };
-      }
-    },
-  });
-
-  // Fetch categories for filter (this can remain as is)
+  // Fetch categories for filter
   const { data: categories } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
@@ -301,14 +489,38 @@ const ReportPage = () => {
     },
   });
 
-  // Use the summary data from the server
-  const summary: StockSummary = summaryData || {
-    total_products: 0,
-    total_batches: 0,
-    total_value: 0,
-    low_stock_items: 0,
-    expiring_soon_items: 0
-  };
+  // Calculate summary data
+  const summary: StockSummary = React.useMemo(() => {
+    if (!stockData) return { total_products: 0, total_batches: 0, total_value: 0, low_stock_items: 0, expiring_soon_items: 0 };
+
+    const uniqueProducts = new Set(stockData.map(item => item.product_id));
+    const uniqueBatches = new Set(stockData.map(item => item.batch_id));
+    const totalValue = stockData.reduce((sum, item) => sum + item.total_value, 0);
+
+    // Calculate items with low stock
+    const lowStockItems = stockData.filter(item => {
+      const minLevel = item.location_type === 'GODOWN' 
+        ? item.min_stock_level_godown || 0
+        : item.min_stock_level_mr || 0;
+      return item.current_quantity_strips <= minLevel;
+    }).length;
+
+    // Calculate items expiring in next 30 days
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const expiringSoonItems = stockData.filter(item => {
+      const expiryDate = new Date(item.expiry_date);
+      return expiryDate <= thirtyDaysFromNow;
+    }).length;
+
+    return {
+      total_products: uniqueProducts.size,
+      total_batches: uniqueBatches.size,
+      total_value: totalValue,
+      low_stock_items: lowStockItems,
+      expiring_soon_items: expiringSoonItems,
+    };
+  }, [stockData]);
 
   const handleClearFilters = () => {
     setProductFilter('');
@@ -380,10 +592,7 @@ const ReportPage = () => {
                       <DollarSign className="h-5 w-5 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-3xl font-extrabold">₹{summary.total_value.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}</div>
+                      <div className="text-3xl font-extrabold">₹{summary.total_value.toFixed(2)}</div>
                     </CardContent>
                   </Card>
 
@@ -446,8 +655,6 @@ const ReportPage = () => {
       <StockTable
         stockData={stockData}
         isLoading={isLoading}
-        totalCount={totalCount}
-        itemsPerPage={ITEMS_PER_PAGE}
         visibleColumns={visibleColumns}
         onColumnToggle={handleColumnToggle}
         sortField={sortField}
@@ -455,6 +662,7 @@ const ReportPage = () => {
         onSort={handleSort}
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
+        itemsPerPage={ITEMS_PER_PAGE}
       />
 
       {/* Alerts for low stock and expiring items */}
