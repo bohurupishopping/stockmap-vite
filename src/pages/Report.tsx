@@ -13,123 +13,44 @@ import StockTable, {
   SortField, 
   SortDirection 
 } from '@/components/report/StockTable';
+import { calculateStockData, calculateStockSummary } from '@/lib/stockCalculations';
+import { StockSummary, StockFilters as StockFiltersType } from '@/types/stock';
 
 const ITEMS_PER_PAGE = 20;
 
-interface StockSummary {
-  total_products: number;
-  total_batches: number;
-  total_value: number;
-  low_stock_items: number;
-  expiring_soon_items: number;
-}
+
 
 const ReportPage = () => {
-  const [locationFilter, setLocationFilter] = useState('ALL');
-  const [productFilter, setProductFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('ALL');
-  const [batchFilter, setBatchFilter] = useState('');
-  const [expiryFromDate, setExpiryFromDate] = useState('');
-  const [expiryToDate, setExpiryToDate] = useState('');
+  const [filters, setFilters] = useState<StockFiltersType>({
+    locationFilter: 'ALL',
+    productFilter: '',
+    categoryFilter: 'ALL',
+    batchFilter: '',
+    expiryFromDate: '',
+    expiryToDate: ''
+  });
   const [currentPage, setCurrentPage] = useState(1);
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(defaultStockColumns);
-  const [sortField, setSortField] = useState<SortField>('product_name');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [sortConfig, setSortConfig] = useState<{ key: SortField; direction: SortDirection }>({
+    key: 'product_name',
+    direction: 'asc'
+  });
+
+  const handleSort = (field: SortField) => {
+    setSortConfig(prev => ({
+      key: field,
+      direction: prev.key === field && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
 
   const handleColumnToggle = (columns: Record<string, boolean>) => {
     setVisibleColumns(columns);
   };
 
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-    // Reset to first page when sorting changes
-    setCurrentPage(1);
-  };
-
-  // Fetch stock data from the new closing_stock_view
+  // Fetch stock data using the calculation service
   const { data: stockData, isLoading } = useQuery({
-    queryKey: ['closing-stock', locationFilter, productFilter, categoryFilter, batchFilter, expiryFromDate, expiryToDate],
-    queryFn: async () => {
-      try {
-        // Build query for closing_stock_view
-        let query = supabase
-          .from('closing_stock_view')
-          .select('*');
-
-        // Apply location filter
-        if (locationFilter !== 'ALL') {
-          if (locationFilter === 'GODOWN') {
-            query = query.eq('location_type', 'GODOWN');
-          } else if (locationFilter === 'MR') {
-            query = query.eq('location_type', 'MR');
-          } else if (locationFilter.startsWith('MR_')) {
-            const mrId = locationFilter.replace('MR_', '');
-            query = query.eq('location_type', 'MR').eq('location_id', mrId);
-          }
-        }
-
-        // Apply product filter
-        if (productFilter) {
-          query = query.or(`product_code.ilike.%${productFilter}%,product_name.ilike.%${productFilter}%`);
-        }
-
-        // Apply category filter
-        if (categoryFilter !== 'ALL') {
-          query = query.eq('category_name', categoryFilter);
-        }
-
-        // Apply batch filter
-        if (batchFilter) {
-          query = query.ilike('batch_number', `%${batchFilter}%`);
-        }
-
-        // Apply expiry date filter
-        if (expiryFromDate && expiryToDate) {
-          query = query
-            .gte('expiry_date', expiryFromDate)
-            .lte('expiry_date', expiryToDate);
-        }
-
-        // Only show items with positive quantity
-        query = query.gt('quantity_strips', 0);
-
-        const { data, error } = await query;
-        
-        if (error) {
-          console.error('Supabase query error:', error);
-          throw error;
-        }
-        
-        // Map the data to match the StockItem interface
-        const stockItems: StockItem[] = data.map(item => ({
-          product_id: item.product_id,
-          product_name: item.product_name,
-          product_code: item.product_code,
-          generic_name: item.generic_name,
-          batch_id: item.batch_id,
-          batch_number: item.batch_number,
-          expiry_date: item.expiry_date,
-          location_type: item.location_type,
-          location_id: item.location_id,
-          current_quantity_strips: item.quantity_strips,
-          cost_per_strip: item.cost_per_strip,
-          total_value: item.total_value,
-          category_name: item.category_name,
-          min_stock_level_godown: item.min_stock_level_godown,
-          min_stock_level_mr: item.min_stock_level_mr
-        }));
-        
-        return stockItems;
-      } catch (error) {
-        console.error('Error fetching stock data:', error);
-        throw error;
-      }
-    },
+    queryKey: ['stock-status', filters.locationFilter, filters.productFilter, filters.categoryFilter, filters.batchFilter, filters.expiryFromDate, filters.expiryToDate],
+    queryFn: () => calculateStockData(filters),
   });
 
   // Fetch categories for filter
@@ -158,45 +79,20 @@ const ReportPage = () => {
     },
   });
 
-  // Calculate summary data
+  // Calculate summary data using the service
   const summary: StockSummary = React.useMemo(() => {
-    if (!stockData) return { total_products: 0, total_batches: 0, total_value: 0, low_stock_items: 0, expiring_soon_items: 0 };
-
-    const uniqueProducts = new Set(stockData.map(item => item.product_id));
-    const uniqueBatches = new Set(stockData.map(item => item.batch_id));
-    const totalValue = stockData.reduce((sum, item) => sum + item.total_value, 0);
-
-    // Calculate items with low stock
-    const lowStockItems = stockData.filter(item => {
-      const minLevel = item.location_type === 'GODOWN' 
-        ? item.min_stock_level_godown || 0
-        : item.min_stock_level_mr || 0;
-      return item.current_quantity_strips <= minLevel;
-    }).length;
-
-    // Calculate items expiring in next 30 days
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-    const expiringSoonItems = stockData.filter(item => {
-      const expiryDate = new Date(item.expiry_date);
-      return expiryDate <= thirtyDaysFromNow;
-    }).length;
-
-    return {
-      total_products: uniqueProducts.size,
-      total_batches: uniqueBatches.size,
-      total_value: totalValue,
-      low_stock_items: lowStockItems,
-      expiring_soon_items: expiringSoonItems,
-    };
+    return calculateStockSummary(stockData || []);
   }, [stockData]);
 
   const handleClearFilters = () => {
-    setProductFilter('');
-    setCategoryFilter('ALL');
-    setBatchFilter('');
-    setExpiryFromDate('');
-    setExpiryToDate('');
+    setFilters({
+      locationFilter: 'ALL',
+      productFilter: '',
+      categoryFilter: 'ALL',
+      batchFilter: '',
+      expiryFromDate: '',
+      expiryToDate: ''
+    });
   };
 
   if (isLoading) {
@@ -303,18 +199,18 @@ const ReportPage = () => {
 
       {/* Filters Component */}
       <StockFilters
-        locationFilter={locationFilter}
-        setLocationFilter={setLocationFilter}
-        productFilter={productFilter}
-        setProductFilter={setProductFilter}
-        categoryFilter={categoryFilter}
-        setCategoryFilter={setCategoryFilter}
-        batchFilter={batchFilter}
-        setBatchFilter={setBatchFilter}
-        expiryFromDate={expiryFromDate}
-        setExpiryFromDate={setExpiryFromDate}
-        expiryToDate={expiryToDate}
-        setExpiryToDate={setExpiryToDate}
+        locationFilter={filters.locationFilter}
+        setLocationFilter={(value) => setFilters(prev => ({ ...prev, locationFilter: value }))}
+        productFilter={filters.productFilter}
+        setProductFilter={(value) => setFilters(prev => ({ ...prev, productFilter: value }))}
+        categoryFilter={filters.categoryFilter}
+        setCategoryFilter={(value) => setFilters(prev => ({ ...prev, categoryFilter: value }))}
+        batchFilter={filters.batchFilter}
+        setBatchFilter={(value) => setFilters(prev => ({ ...prev, batchFilter: value }))}
+        expiryFromDate={filters.expiryFromDate}
+        setExpiryFromDate={(value) => setFilters(prev => ({ ...prev, expiryFromDate: value }))}
+        expiryToDate={filters.expiryToDate}
+        setExpiryToDate={(value) => setFilters(prev => ({ ...prev, expiryToDate: value }))}
         categories={categories}
         mrUsers={mrUsers}
         onClearFilters={handleClearFilters}
@@ -326,8 +222,8 @@ const ReportPage = () => {
         isLoading={isLoading}
         visibleColumns={visibleColumns}
         onColumnToggle={handleColumnToggle}
-        sortField={sortField}
-        sortDirection={sortDirection}
+        sortField={sortConfig.key}
+        sortDirection={sortConfig.direction}
         onSort={handleSort}
         currentPage={currentPage}
         setCurrentPage={setCurrentPage}
