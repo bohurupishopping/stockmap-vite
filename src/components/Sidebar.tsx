@@ -143,7 +143,7 @@ const Sidebar = ({ isCollapsed, onToggle }: SidebarProps) => {
   return (
     <div className={cn(
       "bg-gradient-to-br from-white to-gray-50 border-r border-gray-200 flex flex-col transition-all duration-300 shadow-sm h-full",
-      isCollapsed ? "w-20" : "w-72"
+      isCollapsed ? "w-20" : "w-54"
     )}>
       {/* Header */}
       <div className="border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">

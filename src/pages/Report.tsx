@@ -63,15 +63,6 @@ const ReportPage = () => {
   const { data: stockData, isLoading } = useQuery({
     queryKey: ['stock-status', locationFilter, productFilter, categoryFilter, batchFilter, expiryFromDate, expiryToDate],
     queryFn: async () => {
-      console.log('Fetching stock data with filters:', {
-        locationFilter,
-        productFilter,
-        categoryFilter,
-        batchFilter,
-        expiryFromDate,
-        expiryToDate
-      });
-
       try {
         // First, fetch all products for later lookup
         const { data: products, error: productsError } = await supabase
@@ -137,7 +128,6 @@ const ReportPage = () => {
 
         // Apply filters
         if (productFilter) {
-          console.log('Applying product filter:', productFilter);
           // Get product IDs that match the filter
           const filteredProductIds = products
             ?.filter(p => 
@@ -155,7 +145,6 @@ const ReportPage = () => {
         }
 
         if (batchFilter) {
-          console.log('Applying batch filter:', batchFilter);
           // Get batch IDs that match the filter
           const filteredBatchIds = batches
             ?.filter(b => b.batch_number.toLowerCase().includes(batchFilter.toLowerCase()))
@@ -170,7 +159,6 @@ const ReportPage = () => {
         }
 
         if (expiryFromDate && expiryToDate) {
-          console.log('Applying expiry date range filter:', expiryFromDate, 'to', expiryToDate);
           // Get batch IDs that match the expiry date range
           const filteredBatchIds = batches
             ?.filter(b => {
@@ -189,7 +177,7 @@ const ReportPage = () => {
           }
         }
 
-        console.log('Executing query...');
+
         const { data: transactions, error } = await query;
         
         if (error) {
@@ -197,15 +185,11 @@ const ReportPage = () => {
           throw error;
         }
         
-        console.log(`Query returned ${transactions?.length || 0} transactions`);
-        if (transactions && transactions.length > 0) {
-          console.log('Sample transaction:', transactions[0]);
-        }
 
         // Apply category filter if needed
         let filteredData = transactions || [];
         if (categoryFilter && categoryFilter !== 'ALL') {
-          console.log('Applying category filter in memory:', categoryFilter);
+
           filteredData = filteredData.filter(tx => {
             const product = productMap.get(tx.product_id);
             if (!product || !product.product_categories) return false;
@@ -217,7 +201,7 @@ const ReportPage = () => {
             
             return categories.some((cat: any) => cat.category_name === categoryFilter);
           });
-          console.log(`After category filtering: ${filteredData.length} transactions`);
+
         }
 
         // Calculate actual stock by processing all transactions
@@ -231,7 +215,7 @@ const ReportPage = () => {
             
             // Skip transactions with missing related data
             if (!product || !batch) {
-              console.log('Skipping transaction with missing related data:', transaction);
+
               return;
             }
             
@@ -475,27 +459,13 @@ const ReportPage = () => {
             total_value: item.current_quantity_strips * item.cost_per_strip
           }));
 
-        // Log some statistics for debugging
-        console.log(`Final stock items count: ${stockItems.length}`);
-        
-        // Log stock by location type
+        // Filter stock items by location type for internal use
         const godownItems = stockItems.filter(item => item.location_type === 'GODOWN');
         const mrItems = stockItems.filter(item => item.location_type === 'MR');
-        console.log(`Godown items: ${godownItems.length}, MR items: ${mrItems.length}`);
-        
-        // Log top 5 items by quantity for verification
-        const topItems = [...stockItems].sort((a, b) => b.current_quantity_strips - a.current_quantity_strips).slice(0, 5);
-        console.log('Top 5 items by quantity:', topItems.map(item => ({
-          product: item.product_name,
-          batch: item.batch_number,
-          location: item.location_type + (item.location_id ? `-${item.location_id}` : ''),
-          qty: item.current_quantity_strips,
-          value: item.total_value
-        })));
         
         return stockItems;
       } catch (error) {
-        console.error('Error fetching stock data:', error);
+
         throw error;
       }
     },
