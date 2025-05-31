@@ -1,11 +1,23 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Building2, Shield, Users, TrendingUp } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 
 const Index = () => {
+  const { user, isAdmin, isLoading: authLoading } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect to admin dashboard if user is already authenticated and is an admin
+  useEffect(() => {
+    if (!authLoading && user && isAdmin) {
+      navigate('/admin/dashboard');
+    }
+  }, [user, isAdmin, authLoading, navigate]);
+
   const handleGetStarted = () => {
-    window.location.href = '/auth';
+    navigate('/auth');
   };
 
   return (

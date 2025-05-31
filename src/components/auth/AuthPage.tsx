@@ -1,12 +1,14 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, Building2, Lock, Mail, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -18,6 +20,15 @@ const AuthPage = () => {
   });
   
   const { toast } = useToast();
+  const { user, isAdmin, isLoading: authLoading } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect to admin dashboard if user is already authenticated and is an admin
+  useEffect(() => {
+    if (!authLoading && user && isAdmin) {
+      navigate('/admin/dashboard');
+    }
+  }, [user, isAdmin, authLoading, navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -80,7 +91,7 @@ const AuthPage = () => {
           });
           
           // Redirect to admin dashboard
-          window.location.href = '/admin/dashboard';
+          navigate('/admin/dashboard');
         }
       } else {
         const { data, error } = await supabase.auth.signUp({
