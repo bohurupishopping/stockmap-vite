@@ -63,7 +63,7 @@ const NewMRDispatch = () => {
         product_id: item.product_id,
         batch_id: item.batch_id,
         transaction_type: 'DISPATCH_TO_MR',
-        quantity_strips: -Math.abs(item.quantity_strips), // Negative for outflow
+        quantity_strips: item.quantity_strips,
         location_type_source: 'GODOWN',
         location_id_source: 'GODOWN_MAIN',
         location_type_destination: 'MR',
