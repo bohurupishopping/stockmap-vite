@@ -165,4 +165,4 @@ const StockFilters: React.FC<StockFiltersProps> = ({
   );
 };
 
-export default StockFilters;
+export default StockFilters; 

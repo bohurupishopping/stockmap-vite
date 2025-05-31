@@ -72,7 +72,7 @@ export type SortField = 'product_name' | 'generic_name' | 'batch_number' | 'expi
 export type SortDirection = 'asc' | 'desc';
 
 interface StockTableProps {
-  stockData: StockItem[];
+  stockData: StockItem[] | undefined;
   isLoading: boolean;
   visibleColumns: Record<string, boolean>;
   onColumnToggle: (columns: Record<string, boolean>) => void;
@@ -82,7 +82,6 @@ interface StockTableProps {
   currentPage: number;
   setCurrentPage: (page: number) => void;
   itemsPerPage: number;
-  totalPages: number;
 }
 
 const StockTable: React.FC<StockTableProps> = ({
@@ -95,8 +94,7 @@ const StockTable: React.FC<StockTableProps> = ({
   onSort,
   currentPage,
   setCurrentPage,
-  itemsPerPage,
-  totalPages
+  itemsPerPage
 }) => {
   const getHeaderClass = (key: string) => 
     cn(
@@ -142,6 +140,51 @@ const StockTable: React.FC<StockTableProps> = ({
   const convertStripsToDisplayUnit = (strips: number) => {
     // For now, just show strips. Later this can be enhanced with packaging unit conversion
     return `${strips} strips`;
+  };
+
+  const getSortedData = (data: StockItem[]) => {
+    if (!data) return [];
+    
+    return [...data].sort((a, b) => {
+      let compareA, compareB;
+      
+      switch (sortField) {
+        case 'product_name':
+          compareA = a.product_name.toLowerCase();
+          compareB = b.product_name.toLowerCase();
+          break;
+        case 'generic_name':
+          compareA = (a.generic_name || '').toLowerCase();
+          compareB = (b.generic_name || '').toLowerCase();
+          break;
+        case 'batch_number':
+          compareA = a.batch_number.toLowerCase();
+          compareB = b.batch_number.toLowerCase();
+          break;
+        case 'expiry_date':
+          compareA = new Date(a.expiry_date).getTime();
+          compareB = new Date(b.expiry_date).getTime();
+          break;
+        case 'current_quantity_strips':
+          compareA = a.current_quantity_strips;
+          compareB = b.current_quantity_strips;
+          break;
+        case 'cost_per_strip':
+          compareA = a.cost_per_strip;
+          compareB = b.cost_per_strip;
+          break;
+        case 'total_value':
+          compareA = a.total_value;
+          compareB = b.total_value;
+          break;
+        default:
+          compareA = a.product_name.toLowerCase();
+          compareB = b.product_name.toLowerCase();
+      }
+      
+      const comparison = compareA > compareB ? 1 : compareA < compareB ? -1 : 0;
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
   };
 
   return (
@@ -302,100 +345,102 @@ const StockTable: React.FC<StockTableProps> = ({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  stockData.map((item, index) => {
-                    const stockStatus = getStockStatus(item);
-                    const expiryStatus = getExpiryStatus(item.expiry_date);
-                    
-                    return (
-                      <TableRow key={index} className="hover:bg-muted/50">
-                        {visibleColumns.product && (
-                          <TableCell>
-                            <div className="space-y-1">
-                              <div className="font-medium">{item.product_code}</div>
-                              <div className="text-muted-foreground text-sm">{item.product_name}</div>
-                            </div>
-                          </TableCell>
-                        )}
-                        {visibleColumns.genericName && (
-                          <TableCell>
-                            <span className="text-muted-foreground">{item.generic_name || '-'}</span>
-                          </TableCell>
-                        )}
-                        {visibleColumns.batchNumber && (
-                          <TableCell>
-                            <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
-                              {item.batch_number}
-                            </span>
-                          </TableCell>
-                        )}
-                        {visibleColumns.expiryDate && (
-                          <TableCell>
-                            {new Date(item.expiry_date).toLocaleDateString()}
-                          </TableCell>
-                        )}
-                        {visibleColumns.location && (
-                          <TableCell>
-                            <Badge variant="outline">
-                              {item.location_type === 'GODOWN' ? 'Godown' : `MR ${item.location_id || '-'}`}
-                            </Badge>
-                          </TableCell>
-                        )}
-                        {visibleColumns.currentQuantityStrips && (
-                          <TableCell className="text-center">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${
-                              item.current_quantity_strips <= 0 
-                                ? 'bg-red-100 text-red-800' 
-                                : item.current_quantity_strips <= 10
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-green-100 text-green-800'
-                            }`}>
-                              {item.current_quantity_strips}
-                            </span>
-                          </TableCell>
-                        )}
-                        {visibleColumns.costPerStrip && (
-                          <TableCell className="text-right">
-                            <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
-                              ₹{item.cost_per_strip.toFixed(2)}
-                            </span>
-                          </TableCell>
-                        )}
-                        {visibleColumns.totalValue && (
-                          <TableCell className="text-right">
-                            <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
-                              ₹{item.total_value.toFixed(2)}
-                            </span>
-                          </TableCell>
-                        )}
-                        {visibleColumns.stockStatus && (
-                          <TableCell className="text-center">
-                            <Badge variant={stockStatus.variant}>
-                              {stockStatus.status === 'low' ? 'Low Stock' : 
-                               stockStatus.status === 'medium' ? 'Medium' : 'Good'}
-                            </Badge>
-                          </TableCell>
-                        )}
-                        {visibleColumns.expiryStatus && (
-                          <TableCell className="text-center">
-                            <Badge variant={expiryStatus.variant}>
-                              {expiryStatus.status === 'expired' ? 'Expired' :
-                               expiryStatus.status === 'expiring-soon' ? 'Expiring Soon' : 'Good'}
-                            </Badge>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })
+                  getSortedData(stockData)
+                    .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                    .map((item, index) => {
+                      const stockStatus = getStockStatus(item);
+                      const expiryStatus = getExpiryStatus(item.expiry_date);
+                      
+                      return (
+                        <TableRow key={index} className="hover:bg-muted/50">
+                          {visibleColumns.product && (
+                            <TableCell>
+                              <div className="space-y-1">
+                                <div className="font-medium">{item.product_code}</div>
+                                <div className="text-muted-foreground text-sm">{item.product_name}</div>
+                              </div>
+                            </TableCell>
+                          )}
+                          {visibleColumns.genericName && (
+                            <TableCell>
+                              <span className="text-muted-foreground">{item.generic_name || '-'}</span>
+                            </TableCell>
+                          )}
+                          {visibleColumns.batchNumber && (
+                            <TableCell>
+                              <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                                {item.batch_number}
+                              </span>
+                            </TableCell>
+                          )}
+                          {visibleColumns.expiryDate && (
+                            <TableCell>
+                              {new Date(item.expiry_date).toLocaleDateString()}
+                            </TableCell>
+                          )}
+                          {visibleColumns.location && (
+                            <TableCell>
+                              <Badge variant="outline">
+                                {item.location_type === 'GODOWN' ? 'Godown' : `MR ${item.location_id || '-'}`}
+                              </Badge>
+                            </TableCell>
+                          )}
+                          {visibleColumns.currentQuantityStrips && (
+                            <TableCell className="text-center">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${
+                                item.current_quantity_strips <= 0 
+                                  ? 'bg-red-100 text-red-800' 
+                                  : item.current_quantity_strips <= 10
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-green-100 text-green-800'
+                              }`}>
+                                {item.current_quantity_strips}
+                              </span>
+                            </TableCell>
+                          )}
+                          {visibleColumns.costPerStrip && (
+                            <TableCell className="text-right">
+                              <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                                ₹{item.cost_per_strip.toFixed(2)}
+                              </span>
+                            </TableCell>
+                          )}
+                          {visibleColumns.totalValue && (
+                            <TableCell className="text-right">
+                              <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                                ₹{item.total_value.toFixed(2)}
+                              </span>
+                            </TableCell>
+                          )}
+                          {visibleColumns.stockStatus && (
+                            <TableCell className="text-center">
+                              <Badge variant={stockStatus.variant}>
+                                {stockStatus.status === 'low' ? 'Low Stock' : 
+                                 stockStatus.status === 'medium' ? 'Medium' : 'Good'}
+                              </Badge>
+                            </TableCell>
+                          )}
+                          {visibleColumns.expiryStatus && (
+                            <TableCell className="text-center">
+                              <Badge variant={expiryStatus.variant}>
+                                {expiryStatus.status === 'expired' ? 'Expired' :
+                                 expiryStatus.status === 'expiring-soon' ? 'Expiring Soon' : 'Good'}
+                              </Badge>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })
                 )}
               </TableBody>
             </Table>
           </div>
         </div>
       </CardContent>
-      {totalPages > 0 && (
+      {stockData?.length > 0 && (
         <CardFooter className="flex items-center justify-between px-6 py-4 border-t">
           <div className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages}
+            Page {currentPage} of {Math.ceil(stockData.length / itemsPerPage)}
           </div>
           <div className="flex items-center space-x-2">
             <Button
@@ -424,8 +469,8 @@ const StockTable: React.FC<StockTableProps> = ({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(Math.min(Math.ceil(stockData.length / itemsPerPage), currentPage + 1))}
+              disabled={currentPage === Math.ceil(stockData.length / itemsPerPage)}
               className="h-8 w-8 p-0"
             >
               <span className="sr-only">Go to next page</span>
@@ -434,8 +479,8 @@ const StockTable: React.FC<StockTableProps> = ({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(totalPages)}
-              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(Math.ceil(stockData.length / itemsPerPage))}
+              disabled={currentPage === Math.ceil(stockData.length / itemsPerPage)}
               className="h-8 w-8 p-0"
             >
               <span className="sr-only">Go to last page</span>
@@ -448,4 +493,4 @@ const StockTable: React.FC<StockTableProps> = ({
   );
 };
 
-export default StockTable;
+export default StockTable; 
