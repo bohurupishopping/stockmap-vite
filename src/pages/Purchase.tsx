@@ -5,9 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Filter } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Plus, Search, Filter, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import StockPurchaseTable from '@/components/purchase/PurchaseTable';
+import NewPurchase from '@/components/purchase/NewPurchase';
+import EditPurchase from '@/components/purchase/EditPurchase';
+import ViewPurchase from '@/components/purchase/ViewPurchase';
 import { Tables } from '@/integrations/supabase/types';
 
 type StockPurchase = Tables<'stock_purchases'>;
@@ -47,6 +51,12 @@ const Purchase = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('all_suppliers');
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Modal states
+  const [showNewPurchase, setShowNewPurchase] = useState(false);
+  const [showEditPurchase, setShowEditPurchase] = useState(false);
+  const [showViewPurchase, setShowViewPurchase] = useState(false);
+  const [selectedPurchaseId, setSelectedPurchaseId] = useState<string>('');
 
   // Fetch stock purchases with product and batch details
   const { data: purchases, isLoading, refetch } = useQuery({
@@ -135,7 +145,25 @@ const Purchase = () => {
   });
 
   const handleNewReceipt = () => {
-    navigate('/admin/stock/purchase/new');
+    setShowNewPurchase(true);
+  };
+
+  const handleViewPurchase = (purchaseId: string) => {
+    setSelectedPurchaseId(purchaseId);
+    setShowViewPurchase(true);
+  };
+
+  const handleEditPurchase = (purchaseId: string) => {
+    setSelectedPurchaseId(purchaseId);
+    setShowEditPurchase(true);
+  };
+
+  const handleCloseModals = () => {
+    setShowNewPurchase(false);
+    setShowEditPurchase(false);
+    setShowViewPurchase(false);
+    setSelectedPurchaseId('');
+    refetch(); // Refresh data when modals close
   };
 
   return (
@@ -194,8 +222,71 @@ const Purchase = () => {
           purchases={purchases || []}
           isLoading={isLoading}
           onRefresh={refetch}
+          onView={handleViewPurchase}
+          onEdit={handleEditPurchase}
         />
       </div>
+
+      {/* Modal Components */}
+      {/* New Purchase Modal */}
+      <Dialog open={showNewPurchase} onOpenChange={setShowNewPurchase}>
+        <DialogContent className="max-w-[75vw] max-h-[95vh] overflow-hidden p-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Create New Purchase</DialogTitle>
+          </DialogHeader>
+          <div className="relative h-[95vh] overflow-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute top-4 right-4 z-50 bg-white/80 backdrop-blur-sm hover:bg-white"
+              onClick={handleCloseModals}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+            <NewPurchase onClose={handleCloseModals} />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Purchase Modal */}
+      <Dialog open={showEditPurchase} onOpenChange={setShowEditPurchase}>
+        <DialogContent className="max-w-[75vw] max-h-[95vh] overflow-hidden p-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Edit Purchase</DialogTitle>
+          </DialogHeader>
+          <div className="relative h-[95vh] overflow-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute top-4 right-4 z-50 bg-white/80 backdrop-blur-sm hover:bg-white"
+              onClick={handleCloseModals}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+            <EditPurchase purchaseId={selectedPurchaseId || undefined} onClose={handleCloseModals} />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Purchase Modal */}
+      <Dialog open={showViewPurchase} onOpenChange={setShowViewPurchase}>
+        <DialogContent className="max-w-[75vw] max-h-[95vh] overflow-hidden p-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>View Purchase</DialogTitle>
+          </DialogHeader>
+          <div className="relative h-[95vh] overflow-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute top-4 right-4 z-50 bg-white/80 backdrop-blur-sm hover:bg-white"
+              onClick={handleCloseModals}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+            <ViewPurchase purchaseId={selectedPurchaseId || undefined} onClose={handleCloseModals} />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

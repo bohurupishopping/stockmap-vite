@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, ArrowLeft } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import ReceiptLineItem from '@/components/sale/SaleLineItem';
@@ -25,7 +25,11 @@ interface ReceiptLineItem {
   notes: string;
 }
 
-const NewPurchase = () => {
+interface NewPurchaseProps {
+  onClose?: () => void;
+}
+
+const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -41,6 +45,8 @@ const NewPurchase = () => {
   const [lineItems, setLineItems] = useState<ReceiptLineItem[]>([]);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [showReceiptNotes, setShowReceiptNotes] = useState(false);
+  const [expandedLineItems, setExpandedLineItems] = useState<Set<string>>(new Set());
 
   // Fetch suppliers
   const { data: suppliers } = useQuery({
@@ -104,7 +110,11 @@ const NewPurchase = () => {
         description: "Stock purchase saved successfully",
       });
       queryClient.invalidateQueries({ queryKey: ['stock-purchases'] });
-      navigate('/admin/stock/purchase');
+      if (onClose) {
+        onClose();
+      } else {
+        navigate('/admin/stock/purchase');
+      }
     },
     onError: (error) => {
       toast({
@@ -140,6 +150,16 @@ const NewPurchase = () => {
     ));
   };
 
+  const toggleLineItemNotes = (id: string) => {
+    const newExpanded = new Set(expandedLineItems);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
+    }
+    setExpandedLineItems(newExpanded);
+  };
+
   const handleSave = () => {
     if (!formData.supplier_id || !formData.grn_number || lineItems.length === 0) {
       toast({
@@ -160,127 +180,289 @@ const NewPurchase = () => {
     queryClient.invalidateQueries({ queryKey: ['product-batches'] });
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        switch (event.key) {
+          case 's':
+            event.preventDefault();
+            if (!savePurchaseMutation.isPending && lineItems.length > 0) {
+              handleSave();
+            }
+            break;
+          case 'n':
+            event.preventDefault();
+            addLineItem();
+            break;
+          case 'Escape':
+            event.preventDefault();
+            if (onClose) {
+              onClose();
+            } else {
+              navigate('/admin/stock/purchase');
+            }
+            break;
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [savePurchaseMutation.isPending, lineItems.length, handleSave, addLineItem, navigate]);
+
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={() => navigate('/admin/stock/purchase')}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Receipts
-        </Button>
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">New Stock Receipt</h1>
-          <p className="text-gray-600 mt-1">Create a new goods received note (GRN)</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Modern Header with Breadcrumb */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+             
+            
+              <div>
+                <h1 className="text-2xl font-semibold text-gray-900">New Purchase Receipt</h1>
+                <p className="text-sm text-gray-500 mt-0.5">Create a new goods received note (GRN)</p>
+              </div>
+            </div>
+            
+            {/* Quick Actions */}
+            <div className="flex items-center gap-2">
+              <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                Ctrl+S to save
+              </div>
+          
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Header Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Receipt Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="supplier">Supplier *</Label>
-              <Select 
-                value={formData.supplier_id} 
-                onValueChange={(value) => setFormData({...formData, supplier_id: value})}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  {suppliers?.map((supplier) => (
-                    <SelectItem key={supplier.id} value={supplier.id}>
-                      {supplier.supplier_name} ({supplier.supplier_code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      <div className="p-6 max-w-[100%] mx-auto space-y-6">
+
+        {/* Header Section */}
+        <Card className="shadow-lg border-0 bg-white rounded-xl">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg font-semibold text-gray-900">Purchase Details</CardTitle>
+                <p className="text-sm text-gray-500 mt-1">Enter the basic information for this purchase receipt</p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                Required fields
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="supplier" className="text-sm font-medium text-gray-700">
+                  Supplier <span className="text-red-400">*</span>
+                </Label>
+                <Select 
+                  value={formData.supplier_id} 
+                  onValueChange={(value) => setFormData({...formData, supplier_id: value})}
+                >
+                  <SelectTrigger className="h-9 rounded-lg">
+                    <SelectValue placeholder="Choose supplier..." />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-lg">
+                    {suppliers?.map((supplier) => (
+                      <SelectItem key={supplier.id} value={supplier.id}>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{supplier.supplier_name}</span>
+                          <span className="text-xs text-gray-500">{supplier.supplier_code}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="grn_number" className="text-sm font-medium text-gray-700">
+                  GRN Number <span className="text-red-400">*</span>
+                </Label>
+                <Input
+                  id="grn_number"
+                  value={formData.grn_number}
+                  onChange={(e) => setFormData({...formData, grn_number: e.target.value})}
+                  placeholder="e.g., GRN-2024-001"
+                  className="h-9 rounded-lg"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="receipt_date" className="text-sm font-medium text-gray-700">
+                  Purchase Date <span className="text-red-400">*</span>
+                </Label>
+                <Input
+                  id="receipt_date"
+                  type="date"
+                  value={formData.receipt_date}
+                  onChange={(e) => setFormData({...formData, receipt_date: e.target.value})}
+                  className="h-9 rounded-lg"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">Notes</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowReceiptNotes(!showReceiptNotes)}
+                  className="h-9 w-full justify-between rounded-lg"
+                >
+                  <span className="text-sm">{formData.notes ? 'Notes added' : 'Add notes'}</span>
+                  {showReceiptNotes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
 
-            <div>
-              <Label htmlFor="grn_number">GRN Number *</Label>
-              <Input
-                id="grn_number"
-                value={formData.grn_number}
-                onChange={(e) => setFormData({...formData, grn_number: e.target.value})}
-                placeholder="Enter GRN number"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="receipt_date">Receipt Date *</Label>
-              <Input
-                id="receipt_date"
-                type="date"
-                value={formData.receipt_date}
-                onChange={(e) => setFormData({...formData, receipt_date: e.target.value})}
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="notes">Overall Notes</Label>
-            <Textarea
-              id="notes"
-              value={formData.notes}
-              onChange={(e) => setFormData({...formData, notes: e.target.value})}
-              placeholder="Enter any general notes for this receipt"
-              rows={3}
-            />
-          </div>
+            {showReceiptNotes && (
+              <div className="space-y-2 pt-2">
+                <Textarea
+                  id="notes"
+                  value={formData.notes}
+                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                  placeholder="Enter any general notes for this receipt (optional)"
+                  rows={3}
+                  className="resize-none rounded-lg"
+                />
+              </div>
+            )}
         </CardContent>
       </Card>
 
-      {/* Line Items Section */}
-      <Card>
-        <CardHeader>
+        {/* Line Items Section */}
+        <Card className="shadow-lg border-0 bg-white rounded-xl">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg font-semibold text-gray-900">Product Line Items</CardTitle>
+                <p className="text-sm text-gray-500 mt-1">
+                  Add products to this purchase receipt
+                  {lineItems.length > 0 && (
+                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      {lineItems.length} item{lineItems.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">
+                  Tab to navigate
+                </div>
+                <Button 
+                  onClick={addLineItem} 
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700 text-white rounded-lg"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Product
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {lineItems.length === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
+                <div className="flex flex-col items-center">
+                  <Plus className="h-12 w-12 text-gray-400 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No products added yet</h3>
+                  <p className="text-gray-500 mb-4">Start by adding your first product line item</p>
+                  <Button 
+                    onClick={addLineItem}
+                    variant="outline"
+                    className="border-green-200 text-green-700 hover:bg-green-50 rounded-lg"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add First Product
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {lineItems.map((item, index) => (
+                  <div key={item.id} className="relative">
+                    <div className="absolute -left-4 top-3 w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-medium">
+                      {index + 1}
+                    </div>
+                    <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                      <ReceiptLineItem
+                        item={item}
+                        onUpdate={(updates) => updateLineItem(item.id, updates)}
+                        onRemove={() => removeLineItem(item.id)}
+                        onCreateBatch={(productId) => {
+                          setSelectedProductId(productId);
+                          setIsBatchModalOpen(true);
+                        }}
+                        isCompact={true}
+                        showNotes={expandedLineItems.has(item.id)}
+                        onToggleNotes={() => toggleLineItemNotes(item.id)}
+                      />
+                    </div>
+                  </div>
+                ))}
+                
+                {/* Quick Add Button */}
+                <div className="pt-2">
+                  <Button 
+                    onClick={addLineItem}
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-dashed border-gray-300 text-gray-600 hover:border-green-300 hover:text-green-600 rounded-lg"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Another Product
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Summary and Actions */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-lg">
           <div className="flex items-center justify-between">
-            <CardTitle>Line Items</CardTitle>
-            <Button onClick={addLineItem} className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Add Product Line
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {lineItems.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No line items added yet. Click "Add Product Line" to get started.
+            <div className="flex items-center gap-6">
+              <div className="text-sm text-gray-600">
+                <span className="font-medium">Total Items:</span> {lineItems.length}
+              </div>
+              {lineItems.length > 0 && (
+                <div className="text-sm text-gray-600">
+                  <span className="font-medium">Total Cost:</span> $
+                  {lineItems.reduce((sum, item) => sum + (item.quantity_strips * item.cost_per_strip), 0).toFixed(2)}
+                </div>
+              )}
             </div>
-          ) : (
-            lineItems.map((item) => (
-              <ReceiptLineItem
-                key={item.id}
-                item={item}
-                onUpdate={(updates) => updateLineItem(item.id, updates)}
-                onRemove={() => removeLineItem(item.id)}
-                onCreateBatch={(productId) => {
-                  setSelectedProductId(productId);
-                  setIsBatchModalOpen(true);
-                }}
-              />
-            ))
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Footer Actions */}
-      <div className="flex justify-end gap-4">
-        <Button 
-          variant="outline" 
-          onClick={() => navigate('/admin/stock/purchase')}
-        >
-          Cancel
-        </Button>
-        <Button 
-          onClick={handleSave}
-          disabled={savePurchaseMutation.isPending}
-        >
-          {savePurchaseMutation.isPending ? 'Saving...' : 'Save Purchase'}
-        </Button>
+            
+            <div className="flex items-center gap-3">
+              <Button 
+                variant="outline" 
+                onClick={() => onClose ? onClose() : navigate('/admin/stock/purchase')}
+                className="px-6 rounded-lg"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSave}
+                disabled={savePurchaseMutation.isPending || lineItems.length === 0}
+                className="px-6 bg-blue-600 hover:bg-blue-700 rounded-lg"
+              >
+                {savePurchaseMutation.isPending ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Saving...
+                  </>
+                ) : (
+                  'Save Purchase'
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Batch Modal */}

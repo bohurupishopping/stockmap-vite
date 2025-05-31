@@ -44,9 +44,11 @@ interface StockPurchaseTableProps {
   purchases: StockPurchaseGroup[];
   isLoading: boolean;
   onRefresh: () => void;
+  onView?: (purchaseId: string) => void;
+  onEdit?: (purchaseId: string) => void;
 }
 
-const StockPurchaseTable = ({ purchases, isLoading, onRefresh }: StockPurchaseTableProps) => {
+const StockPurchaseTable = ({ purchases, isLoading, onRefresh, onView, onEdit }: StockPurchaseTableProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -84,13 +86,21 @@ const StockPurchaseTable = ({ purchases, isLoading, onRefresh }: StockPurchaseTa
   });
 
   const handleView = (purchase: StockPurchaseGroup) => {
-    // Navigate to view receipt page
-    navigate(`/admin/stock/purchase/${purchase.purchase_group_id}/view`);
+    if (onView) {
+      onView(purchase.purchase_group_id);
+    } else {
+      // Fallback to navigation if onView prop is not provided
+      navigate(`/admin/stock/purchase/${purchase.purchase_group_id}/view`);
+    }
   };
 
   const handleEdit = (purchase: StockPurchaseGroup) => {
-    // Navigate to edit receipt page
-    navigate(`/admin/stock/purchase/${purchase.purchase_group_id}/edit`);
+    if (onEdit) {
+      onEdit(purchase.purchase_group_id);
+    } else {
+      // Fallback to navigation if onEdit prop is not provided
+      navigate(`/admin/stock/purchase/${purchase.purchase_group_id}/edit`);
+    }
   };
 
   const handleDeleteClick = (purchase: StockPurchaseGroup) => {
