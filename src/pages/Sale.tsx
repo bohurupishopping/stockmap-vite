@@ -2,15 +2,17 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Truck, ShoppingCart, ArrowLeft, Edit, Eye, Trash2, Search } from 'lucide-react';
+import { Plus, Truck, ShoppingCart, ArrowLeft, Edit, Eye, Trash2, Search, X } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
-import { PostgrestFilterBuilder } from '@supabase/postgrest-js';
-import { Database } from '@/integrations/supabase/types';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import NewDirectSale from '@/components/sale/NewDirectSale';
+import NewMRDispatch from '@/components/sale/NewMRDispatch';
+import EditDirectSale from '@/components/sale/EditDirectSale';
+import EditMRDispatch from '@/components/sale/EditMRDispatch';
 
 interface DispatchTransaction {
   sale_id: string;
@@ -40,6 +42,23 @@ const Sale = () => {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('all_suppliers');
+  
+  // Modal states
+  const [showNewDirectSale, setShowNewDirectSale] = useState(false);
+  const [showNewMRDispatch, setShowNewMRDispatch] = useState(false);
+  const [showEditDirectSale, setShowEditDirectSale] = useState(false);
+  const [showEditMRDispatch, setShowEditMRDispatch] = useState(false);
+  const [selectedSaleGroupId, setSelectedSaleGroupId] = useState<string>('');
+
+  // Handle modal close and refresh
+  const handleCloseModals = () => {
+    setShowNewDirectSale(false);
+    setShowNewMRDispatch(false);
+    setShowEditDirectSale(false);
+    setShowEditMRDispatch(false);
+    setSelectedSaleGroupId('');
+    refetch(); // Refresh data when modals close
+  };
 
   // Fetch suppliers for filter
   const { data: suppliers } = useQuery({
@@ -129,9 +148,19 @@ const Sale = () => {
   };
 
   const handleEdit = (dispatch: DispatchTransaction) => {
-    // For now, we'll show an alert
-    // In a real application, you might navigate to an edit form
-    alert(`Edit functionality for dispatch ${dispatch.sale_id} would be implemented here.`);
+    setSelectedSaleGroupId(dispatch.sale_group_id);
+    
+    if (dispatch.transaction_type === 'SALE_DIRECT_GODOWN') {
+      setShowEditDirectSale(true);
+    } else if (dispatch.transaction_type === 'SALE_MR_DISPATCH' || dispatch.transaction_type === 'DISPATCH_TO_MR') {
+      setShowEditMRDispatch(true);
+    } else {
+      toast({
+        title: "Error",
+        description: "Cannot edit this transaction type",
+        variant: "destructive",
+      });
+    }
   };
 
   const getDispatchTypeBadge = (type: string) => {
@@ -187,18 +216,18 @@ const Sale = () => {
 
           <div className="flex items-center gap-1.5">
             <Button 
-              onClick={() => navigate('/admin/stock/sale/direct/new')} 
+              onClick={() => setShowNewDirectSale(true)} 
               className="h-8 px-3 bg-blue-600 hover:bg-blue-700 rounded-full text-sm"
             >
               <Plus className="h-4 w-4 mr-1" />
               Direct Sales
             </Button>
             <Button 
-              onClick={() => navigate('/admin/stock/sale/mr/new')} 
-              className="h-8 px-3 bg-blue-600 hover:bg-blue-700 rounded-full text-sm"
+              onClick={() => setShowNewMRDispatch(true)}
+              className="h-8 px-3 bg-red-600 hover:bg-blue-700 rounded-full text-sm"
             >
-              <Plus className="h-4 w-4 mr-1" />
-              New MR Dispatch
+              <Plus className="h-4 w-4 mr-2" />
+              MR Sales
             </Button>
           </div>
         </div>
@@ -324,6 +353,85 @@ const Sale = () => {
           </TableBody>
         </Table>
       </div>
+
+      {/* Modal Components */}
+      {/* New Direct Sale Modal */}
+      <Dialog open={showNewDirectSale} onOpenChange={setShowNewDirectSale}>
+        <DialogContent className="max-w-[75vw] max-h-[95vh] p-0 overflow-hidden">
+          <DialogHeader className="sr-only">
+            <DialogTitle>New Direct Sale</DialogTitle>
+          </DialogHeader>
+          <button
+            onClick={() => setShowNewDirectSale(false)}
+            className="absolute right-4 top-4 z-50 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </button>
+          <NewDirectSale onClose={handleCloseModals} />
+        </DialogContent>
+      </Dialog>
+
+      {/* New MR Dispatch Modal */}
+      <Dialog open={showNewMRDispatch} onOpenChange={setShowNewMRDispatch}>
+        <DialogContent className="max-w-[75vw] max-h-[95vh] p-0 overflow-hidden">
+          <DialogHeader className="sr-only">
+            <DialogTitle>New MR Dispatch</DialogTitle>
+          </DialogHeader>
+          <button
+            onClick={() => setShowNewMRDispatch(false)}
+            className="absolute right-4 top-4 z-50 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </button>
+          <NewMRDispatch onClose={handleCloseModals} />
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Direct Sale Modal */}
+      <Dialog open={showEditDirectSale} onOpenChange={setShowEditDirectSale}>
+        <DialogContent className="max-w-[75vw] max-h-[95vh] p-0 overflow-hidden">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Edit Direct Sale</DialogTitle>
+          </DialogHeader>
+          <button
+            onClick={() => setShowEditDirectSale(false)}
+            className="absolute right-4 top-4 z-50 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </button>
+          {selectedSaleGroupId && (
+            <EditDirectSale 
+              saleGroupId={selectedSaleGroupId} 
+              onClose={handleCloseModals} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit MR Dispatch Modal */}
+      <Dialog open={showEditMRDispatch} onOpenChange={setShowEditMRDispatch}>
+        <DialogContent className="max-w-[75vw] max-h-[95vh] p-0 overflow-hidden">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Edit MR Dispatch</DialogTitle>
+          </DialogHeader>
+          <button
+            onClick={() => setShowEditMRDispatch(false)}
+            className="absolute right-4 top-4 z-50 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </button>
+          {selectedSaleGroupId && (
+            <EditMRDispatch 
+              saleGroupId={selectedSaleGroupId} 
+              onClose={handleCloseModals} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

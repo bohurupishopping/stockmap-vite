@@ -5,16 +5,14 @@ import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import ReceiptLineItem from '@/components/purchase/PurchaseLineItem';
-import BatchModal from '@/components/batches/BatchModal';
+import DispatchLineItem from '@/components/sale/SaleLineItem';
 
-interface ReceiptLineItem {
+interface SaleLineItem {
   id: string;
   product_id: string;
   batch_id: string;
@@ -25,109 +23,142 @@ interface ReceiptLineItem {
   notes: string;
 }
 
-interface NewPurchaseProps {
+interface EditDirectSaleProps {
+  saleGroupId: string;
   onClose?: () => void;
 }
 
-const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
+const EditDirectSale = ({ saleGroupId, onClose }: EditDirectSaleProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { profile } = useAuth();
 
   const [formData, setFormData] = useState({
-    supplier_id: '',
-    grn_number: '',
-    receipt_date: new Date().toISOString().split('T')[0],
+    customer_name: '',
+    invoice_number: '',
+    sales_date: new Date().toISOString().split('T')[0],
     notes: '',
   });
 
-  const [lineItems, setLineItems] = useState<ReceiptLineItem[]>([]);
-  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
-  const [selectedProductId, setSelectedProductId] = useState<string>('');
-  const [showReceiptNotes, setShowReceiptNotes] = useState(false);
+  const [lineItems, setLineItems] = useState<SaleLineItem[]>([]);
+  const [showSaleNotes, setShowSaleNotes] = useState(false);
   const [expandedLineItems, setExpandedLineItems] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch suppliers
-  const { data: suppliers } = useQuery({
-    queryKey: ['suppliers'],
+  // Fetch existing sale data
+  const { data: existingSale } = useQuery({
+    queryKey: ['sale-data', saleGroupId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('suppliers')
-        .select('*')
-        .eq('is_active', true)
-        .order('supplier_name');
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  // Fetch product data for BatchModal
-  const { data: selectedProduct } = useQuery({
-    queryKey: ['product-for-batch', selectedProductId],
-    queryFn: async () => {
-      if (!selectedProductId) return null;
-      const { data, error } = await supabase
-        .from('products')
-        .select('id, product_name, product_code, base_cost_per_strip')
-        .eq('id', selectedProductId)
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!selectedProductId,
-  });
-
-  // Save purchase mutation
-  const savePurchaseMutation = useMutation({
-    mutationFn: async () => {
-      const purchase_group_id = crypto.randomUUID();
-      const supplier = suppliers?.find(s => s.id === formData.supplier_id);
+        .from('stock_sales')
+        .select(`
+          *,
+          products:product_id (
+            product_name,
+            product_code
+          ),
+          product_batches:batch_id (
+            batch_number
+          )
+        `)
+        .eq('sale_group_id', saleGroupId)
+        .eq('transaction_type', 'SALE_DIRECT_GODOWN');
       
-      const purchases = lineItems.map(item => ({
-        purchase_group_id,
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!saleGroupId,
+  });
+
+  // Load existing data into form
+  useEffect(() => {
+    if (existingSale && existingSale.length > 0) {
+      const firstSale = existingSale[0];
+      setFormData({
+        customer_name: firstSale.location_id_destination || '',
+        invoice_number: firstSale.reference_document_id || '',
+        sales_date: firstSale.sale_date || new Date().toISOString().split('T')[0],
+        notes: firstSale.notes || '',
+      });
+
+      const items: SaleLineItem[] = existingSale.map(sale => ({
+        id: sale.sale_id,
+        product_id: sale.product_id,
+        batch_id: sale.batch_id,
+        quantity: Math.abs(sale.quantity_strips), // Convert negative to positive for display
+        unit_id: 'strips',
+        quantity_strips: Math.abs(sale.quantity_strips),
+        cost_per_strip: sale.cost_per_strip,
+        notes: sale.notes || '',
+      }));
+      
+      setLineItems(items);
+      setIsLoading(false);
+    }
+  }, [existingSale]);
+
+  // Update sale mutation
+  const updateSaleMutation = useMutation({
+    mutationFn: async () => {
+      // First, delete existing line items
+      const { error: deleteError } = await supabase
+        .from('stock_sales')
+        .delete()
+        .eq('sale_group_id', saleGroupId);
+      
+      if (deleteError) throw deleteError;
+
+      // Then insert updated line items
+      const sales = lineItems.map(item => ({
+        sale_group_id: saleGroupId,
         product_id: item.product_id,
         batch_id: item.batch_id,
+        transaction_type: 'SALE_DIRECT_GODOWN',
         quantity_strips: item.quantity_strips,
-        supplier_id: supplier?.supplier_name || formData.supplier_id,
-        purchase_date: formData.receipt_date,
-        reference_document_id: formData.grn_number,
+        location_type_source: 'GODOWN',
+        location_id_source: 'GODOWN_MAIN',
+        location_type_destination: 'CUSTOMER',
+        location_id_destination: formData.customer_name,
+        sale_date: formData.sales_date,
+        reference_document_id: formData.invoice_number,
         cost_per_strip: item.cost_per_strip,
         notes: item.notes || formData.notes,
         created_by: profile?.user_id,
       }));
 
       const { error } = await supabase
-        .from('stock_purchases')
-        .insert(purchases);
+        .from('stock_sales')
+        .insert(sales);
 
       if (error) throw error;
-      return purchases;
+      return sales;
     },
     onSuccess: () => {
       toast({
         title: "Success",
-        description: "Stock purchase saved successfully",
+        description: "Direct sale updated successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ['stock-purchases'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-sales'] });
+      queryClient.invalidateQueries({ queryKey: ['recent-dispatches'] });
       if (onClose) {
         onClose();
       } else {
-        navigate('/admin/stock/purchase');
+        navigate('/admin/stock/sale');
       }
     },
     onError: (error) => {
       toast({
         title: "Error",
-        description: "Failed to save stock receipt",
+        description: "Failed to update direct sale",
         variant: "destructive",
       });
-      console.error('Error saving receipt:', error);
+      console.error('Error updating sale:', error);
     },
   });
 
   const addLineItem = () => {
-    const newItem: ReceiptLineItem = {
+    const newItem: SaleLineItem = {
       id: crypto.randomUUID(),
       product_id: '',
       batch_id: '',
@@ -144,7 +175,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
     setLineItems(lineItems.filter(item => item.id !== id));
   };
 
-  const updateLineItem = (id: string, updates: Partial<ReceiptLineItem>) => {
+  const updateLineItem = (id: string, updates: Partial<SaleLineItem>) => {
     setLineItems(lineItems.map(item => 
       item.id === id ? { ...item, ...updates } : item
     ));
@@ -161,7 +192,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
   };
 
   const handleSave = () => {
-    if (!formData.supplier_id || !formData.grn_number || lineItems.length === 0) {
+    if (!formData.customer_name || !formData.invoice_number || lineItems.length === 0) {
       toast({
         title: "Validation Error",
         description: "Please fill in all required fields and add at least one line item",
@@ -170,14 +201,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
       return;
     }
 
-    savePurchaseMutation.mutate();
-  };
-
-  const handleBatchCreated = () => {
-    setIsBatchModalOpen(false);
-    setSelectedProductId('');
-    // Refresh product batches query
-    queryClient.invalidateQueries({ queryKey: ['product-batches'] });
+    updateSaleMutation.mutate();
   };
 
   // Keyboard shortcuts
@@ -187,7 +211,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
         switch (event.key) {
           case 's':
             event.preventDefault();
-            if (!savePurchaseMutation.isPending && lineItems.length > 0) {
+            if (!updateSaleMutation.isPending && lineItems.length > 0) {
               handleSave();
             }
             break;
@@ -200,7 +224,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
             if (onClose) {
               onClose();
             } else {
-              navigate('/admin/stock/purchase');
+              navigate('/admin/stock/sale');
             }
             break;
         }
@@ -209,43 +233,71 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [savePurchaseMutation.isPending, lineItems.length, handleSave, addLineItem, navigate]);
+  }, [updateSaleMutation.isPending, lineItems.length, handleSave, addLineItem, navigate]);
+
+  if (isLoading) {
+    return (
+      <div className="h-full bg-gray-50 flex items-center justify-center p-8">
+        <div className="flex items-center gap-2">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span>Loading sale data...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="bg-gray-50 h-screen flex flex-col">
       {/* Modern Header with Breadcrumb */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <div className="bg-white border-b border-gray-200 flex-shrink-0 z-10">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-             
-            
               <div>
-                <h1 className="text-2xl font-semibold text-gray-900">New Purchase Receipt</h1>
-                <p className="text-sm text-gray-500 mt-0.5">Create a new goods received note (GRN)</p>
+                <h1 className="text-2xl font-semibold text-gray-900">Edit Direct Sale</h1>
+                <p className="text-sm text-gray-500 mt-0.5">Modify existing direct sale record</p>
               </div>
             </div>
             
-            {/* Quick Actions */}
-            <div className="flex items-center gap-2">
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3">
               <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
                 Ctrl+S to save
               </div>
-          
+              <Button 
+                variant="outline" 
+                onClick={() => onClose ? onClose() : navigate('/admin/stock/sale')}
+                className="px-4 py-2 rounded-lg"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSave}
+                disabled={updateSaleMutation.isPending || lineItems.length === 0}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg"
+              >
+                {updateSaleMutation.isPending ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Updating...
+                  </>
+                ) : (
+                  'Update Sale'
+                )}
+              </Button>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="p-6 max-w-[100%] mx-auto space-y-6">
-
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {/* Header Section */}
         <Card className="shadow-lg border-0 bg-white rounded-xl">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg font-semibold text-gray-900">Purchase Details</CardTitle>
-                <p className="text-sm text-gray-500 mt-1">Enter the basic information for this purchase receipt</p>
+                <CardTitle className="text-lg font-semibold text-gray-900">Sale Details</CardTitle>
+                <p className="text-sm text-gray-500 mt-1">Update the basic information for this direct sale</p>
               </div>
               <div className="flex items-center gap-2 text-xs text-gray-500">
                 <div className="w-2 h-2 bg-red-400 rounded-full"></div>
@@ -256,51 +308,40 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="supplier" className="text-sm font-medium text-gray-700">
-                  Supplier <span className="text-red-400">*</span>
-                </Label>
-                <Select 
-                  value={formData.supplier_id} 
-                  onValueChange={(value) => setFormData({...formData, supplier_id: value})}
-                >
-                  <SelectTrigger className="h-9 rounded-lg">
-                    <SelectValue placeholder="Choose supplier..." />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-lg">
-                    {suppliers?.map((supplier) => (
-                      <SelectItem key={supplier.id} value={supplier.id}>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{supplier.supplier_name}</span>
-                          <span className="text-xs text-gray-500">{supplier.supplier_code}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="grn_number" className="text-sm font-medium text-gray-700">
-                  GRN Number <span className="text-red-400">*</span>
+                <Label htmlFor="customer_name" className="text-sm font-medium text-gray-700">
+                  Customer Name <span className="text-red-400">*</span>
                 </Label>
                 <Input
-                  id="grn_number"
-                  value={formData.grn_number}
-                  onChange={(e) => setFormData({...formData, grn_number: e.target.value})}
-                  placeholder="e.g., GRN-2024-001"
+                  id="customer_name"
+                  value={formData.customer_name}
+                  onChange={(e) => setFormData({...formData, customer_name: e.target.value})}
+                  placeholder="e.g., ABC Pharmacy"
                   className="h-9 rounded-lg"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="receipt_date" className="text-sm font-medium text-gray-700">
-                  Purchase Date <span className="text-red-400">*</span>
+                <Label htmlFor="invoice_number" className="text-sm font-medium text-gray-700">
+                  Invoice Number <span className="text-red-400">*</span>
                 </Label>
                 <Input
-                  id="receipt_date"
+                  id="invoice_number"
+                  value={formData.invoice_number}
+                  onChange={(e) => setFormData({...formData, invoice_number: e.target.value})}
+                  placeholder="e.g., INV-2024-001"
+                  className="h-9 rounded-lg"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="sales_date" className="text-sm font-medium text-gray-700">
+                  Sales Date <span className="text-red-400">*</span>
+                </Label>
+                <Input
+                  id="sales_date"
                   type="date"
-                  value={formData.receipt_date}
-                  onChange={(e) => setFormData({...formData, receipt_date: e.target.value})}
+                  value={formData.sales_date}
+                  onChange={(e) => setFormData({...formData, sales_date: e.target.value})}
                   className="h-9 rounded-lg"
                 />
               </div>
@@ -311,29 +352,29 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowReceiptNotes(!showReceiptNotes)}
+                  onClick={() => setShowSaleNotes(!showSaleNotes)}
                   className="h-9 w-full justify-between rounded-lg"
                 >
                   <span className="text-sm">{formData.notes ? 'Notes added' : 'Add notes'}</span>
-                  {showReceiptNotes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  {showSaleNotes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
 
-            {showReceiptNotes && (
+            {showSaleNotes && (
               <div className="space-y-2 pt-2">
                 <Textarea
                   id="notes"
                   value={formData.notes}
                   onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                  placeholder="Enter any general notes for this receipt (optional)"
+                  placeholder="Enter any general notes for this sale (optional)"
                   rows={3}
                   className="resize-none rounded-lg"
                 />
               </div>
             )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
         {/* Line Items Section */}
         <Card className="shadow-lg border-0 bg-white rounded-xl">
@@ -342,7 +383,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
               <div>
                 <CardTitle className="text-lg font-semibold text-gray-900">Product Line Items</CardTitle>
                 <p className="text-sm text-gray-500 mt-1">
-                  Add products to this purchase receipt
+                  Modify products in this direct sale
                   {lineItems.length > 0 && (
                     <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                       {lineItems.length} item{lineItems.length !== 1 ? 's' : ''}
@@ -390,17 +431,11 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
                       {index + 1}
                     </div>
                     <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
-                      <ReceiptLineItem
+                      <DispatchLineItem
                         item={item}
                         onUpdate={(updates) => updateLineItem(item.id, updates)}
                         onRemove={() => removeLineItem(item.id)}
-                        onCreateBatch={(productId) => {
-                          setSelectedProductId(productId);
-                          setIsBatchModalOpen(true);
-                        }}
-                        isCompact={true}
-                        showNotes={expandedLineItems.has(item.id)}
-                        onToggleNotes={() => toggleLineItemNotes(item.id)}
+                        showGodownStock={true}
                       />
                     </div>
                   </div>
@@ -424,63 +459,26 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
         </Card>
 
         {/* Summary and Actions */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-lg mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="text-sm text-gray-600">
                 <span className="font-medium">Total Items:</span> {lineItems.length}
               </div>
               {lineItems.length > 0 && (
                 <div className="text-sm text-gray-600">
-                  <span className="font-medium">Total Cost:</span> $
+                  <span className="font-medium">Total Amount:</span> ₹
                   {lineItems.reduce((sum, item) => sum + (item.quantity_strips * item.cost_per_strip), 0).toFixed(2)}
                 </div>
               )}
             </div>
             
-            <div className="flex items-center gap-3">
-              <Button 
-                variant="outline" 
-                onClick={() => onClose ? onClose() : navigate('/admin/stock/purchase')}
-                className="px-6 rounded-lg"
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleSave}
-                disabled={savePurchaseMutation.isPending || lineItems.length === 0}
-                className="px-6 bg-blue-600 hover:bg-blue-700 rounded-lg"
-              >
-                {savePurchaseMutation.isPending ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Saving...
-                  </>
-                ) : (
-                  'Save Purchase'
-                )}
-              </Button>
-            </div>
+
           </div>
         </div>
       </div>
-
-      {/* Batch Modal */}
-      {selectedProduct && (
-        <BatchModal
-          isOpen={isBatchModalOpen}
-          onClose={() => {
-            setIsBatchModalOpen(false);
-            setSelectedProductId('');
-          }}
-          onSuccess={handleBatchCreated}
-          editingBatch={null}
-          productId={selectedProductId}
-          product={selectedProduct}
-        />
-      )}
     </div>
   );
 };
 
-export default NewPurchase;
+export default EditDirectSale;

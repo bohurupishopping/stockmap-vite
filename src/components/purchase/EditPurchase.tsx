@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Plus, Trash2, ArrowLeft, Save, ChevronDown, ChevronUp } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import ReceiptLineItem from '@/components/sale/SaleLineItem';
+import ReceiptLineItem from '@/components/purchase/PurchaseLineItem';
 import BatchModal from '@/components/batches/BatchModal';
 
 interface ReceiptLineItem {
@@ -541,7 +541,7 @@ const EditPurchase = ({ purchaseId, onClose }: EditPurchaseProps = {}) => {
         </Card>
 
         {/* Summary and Actions */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-lg">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-6">
               <div className="text-sm text-gray-600">

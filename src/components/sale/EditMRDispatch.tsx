@@ -5,16 +5,15 @@ import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Plus, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import ReceiptLineItem from '@/components/purchase/PurchaseLineItem';
-import BatchModal from '@/components/batches/BatchModal';
+import DispatchLineItem from '@/components/sale/SaleLineItem';
 
-interface ReceiptLineItem {
+interface DispatchLineItem {
   id: string;
   product_id: string;
   batch_id: string;
@@ -25,109 +24,156 @@ interface ReceiptLineItem {
   notes: string;
 }
 
-interface NewPurchaseProps {
+interface EditMRDispatchProps {
+  saleGroupId: string;
   onClose?: () => void;
 }
 
-const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
+const EditMRDispatch = ({ saleGroupId, onClose }: EditMRDispatchProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { profile } = useAuth();
 
   const [formData, setFormData] = useState({
-    supplier_id: '',
-    grn_number: '',
-    receipt_date: new Date().toISOString().split('T')[0],
+    medical_representative_id: '',
+    dispatch_note: '',
+    dispatch_date: new Date().toISOString().split('T')[0],
     notes: '',
   });
 
-  const [lineItems, setLineItems] = useState<ReceiptLineItem[]>([]);
-  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
-  const [selectedProductId, setSelectedProductId] = useState<string>('');
-  const [showReceiptNotes, setShowReceiptNotes] = useState(false);
+  const [lineItems, setLineItems] = useState<DispatchLineItem[]>([]);
+  const [showDispatchNotes, setShowDispatchNotes] = useState(false);
   const [expandedLineItems, setExpandedLineItems] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch suppliers
-  const { data: suppliers } = useQuery({
-    queryKey: ['suppliers'],
+  // Fetch Medical Representatives (users with role 'user')
+  const { data: medicalReps } = useQuery({
+    queryKey: ['medical-reps'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('suppliers')
+        .from('profiles')
         .select('*')
-        .eq('is_active', true)
-        .order('supplier_name');
+        .eq('role', 'user')
+        .order('name');
       if (error) throw error;
       return data;
     },
   });
 
-  // Fetch product data for BatchModal
-  const { data: selectedProduct } = useQuery({
-    queryKey: ['product-for-batch', selectedProductId],
+  // Fetch existing dispatch data
+  const { data: existingDispatch } = useQuery({
+    queryKey: ['dispatch-data', saleGroupId],
     queryFn: async () => {
-      if (!selectedProductId) return null;
       const { data, error } = await supabase
-        .from('products')
-        .select('id, product_name, product_code, base_cost_per_strip')
-        .eq('id', selectedProductId)
-        .single();
+        .from('stock_sales')
+        .select(`
+          *,
+          products:product_id (
+            product_name,
+            product_code
+          ),
+          product_batches:batch_id (
+            batch_number
+          )
+        `)
+        .eq('sale_group_id', saleGroupId)
+        .eq('transaction_type', 'SALE_MR_DISPATCH');
+      
       if (error) throw error;
       return data;
     },
-    enabled: !!selectedProductId,
+    enabled: !!saleGroupId,
   });
 
-  // Save purchase mutation
-  const savePurchaseMutation = useMutation({
-    mutationFn: async () => {
-      const purchase_group_id = crypto.randomUUID();
-      const supplier = suppliers?.find(s => s.id === formData.supplier_id);
+  // Load existing data into form
+  useEffect(() => {
+    if (existingDispatch && existingDispatch.length > 0) {
+      const firstDispatch = existingDispatch[0];
+      setFormData({
+        medical_representative_id: firstDispatch.location_id_destination || '',
+        dispatch_note: firstDispatch.reference_document_id || '',
+        dispatch_date: firstDispatch.sale_date || new Date().toISOString().split('T')[0],
+        notes: firstDispatch.notes || '',
+      });
+
+      const items: DispatchLineItem[] = existingDispatch.map(dispatch => ({
+        id: dispatch.sale_id,
+        product_id: dispatch.product_id,
+        batch_id: dispatch.batch_id,
+        quantity: Math.abs(dispatch.quantity_strips), // Convert negative to positive for display
+        unit_id: 'strips',
+        quantity_strips: Math.abs(dispatch.quantity_strips),
+        cost_per_strip: dispatch.cost_per_strip,
+        notes: dispatch.notes || '',
+      }));
       
-      const purchases = lineItems.map(item => ({
-        purchase_group_id,
+      setLineItems(items);
+      setIsLoading(false);
+    }
+  }, [existingDispatch]);
+
+  // Update dispatch mutation
+  const updateDispatchMutation = useMutation({
+    mutationFn: async () => {
+      // First, delete existing line items
+      const { error: deleteError } = await supabase
+        .from('stock_sales')
+        .delete()
+        .eq('sale_group_id', saleGroupId);
+      
+      if (deleteError) throw deleteError;
+
+      // Then insert updated line items
+      const dispatches = lineItems.map(item => ({
+        sale_group_id: saleGroupId,
         product_id: item.product_id,
         batch_id: item.batch_id,
+        transaction_type: 'SALE_MR_DISPATCH',
         quantity_strips: item.quantity_strips,
-        supplier_id: supplier?.supplier_name || formData.supplier_id,
-        purchase_date: formData.receipt_date,
-        reference_document_id: formData.grn_number,
+        location_type_source: 'GODOWN',
+        location_id_source: 'GODOWN_MAIN',
+        location_type_destination: 'MR',
+        location_id_destination: formData.medical_representative_id,
+        sale_date: formData.dispatch_date,
+        reference_document_id: formData.dispatch_note,
         cost_per_strip: item.cost_per_strip,
         notes: item.notes || formData.notes,
         created_by: profile?.user_id,
       }));
 
       const { error } = await supabase
-        .from('stock_purchases')
-        .insert(purchases);
+        .from('stock_sales')
+        .insert(dispatches);
 
       if (error) throw error;
-      return purchases;
+      return dispatches;
     },
     onSuccess: () => {
       toast({
         title: "Success",
-        description: "Stock purchase saved successfully",
+        description: "MR dispatch updated successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ['stock-purchases'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-sales'] });
+      queryClient.invalidateQueries({ queryKey: ['recent-dispatches'] });
       if (onClose) {
         onClose();
       } else {
-        navigate('/admin/stock/purchase');
+        navigate('/admin/stock/sale');
       }
     },
     onError: (error) => {
       toast({
         title: "Error",
-        description: "Failed to save stock receipt",
+        description: "Failed to update MR dispatch",
         variant: "destructive",
       });
-      console.error('Error saving receipt:', error);
+      console.error('Error updating dispatch:', error);
     },
   });
 
   const addLineItem = () => {
-    const newItem: ReceiptLineItem = {
+    const newItem: DispatchLineItem = {
       id: crypto.randomUUID(),
       product_id: '',
       batch_id: '',
@@ -144,7 +190,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
     setLineItems(lineItems.filter(item => item.id !== id));
   };
 
-  const updateLineItem = (id: string, updates: Partial<ReceiptLineItem>) => {
+  const updateLineItem = (id: string, updates: Partial<DispatchLineItem>) => {
     setLineItems(lineItems.map(item => 
       item.id === id ? { ...item, ...updates } : item
     ));
@@ -161,7 +207,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
   };
 
   const handleSave = () => {
-    if (!formData.supplier_id || !formData.grn_number || lineItems.length === 0) {
+    if (!formData.medical_representative_id || !formData.dispatch_note || lineItems.length === 0) {
       toast({
         title: "Validation Error",
         description: "Please fill in all required fields and add at least one line item",
@@ -170,14 +216,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
       return;
     }
 
-    savePurchaseMutation.mutate();
-  };
-
-  const handleBatchCreated = () => {
-    setIsBatchModalOpen(false);
-    setSelectedProductId('');
-    // Refresh product batches query
-    queryClient.invalidateQueries({ queryKey: ['product-batches'] });
+    updateDispatchMutation.mutate();
   };
 
   // Keyboard shortcuts
@@ -187,7 +226,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
         switch (event.key) {
           case 's':
             event.preventDefault();
-            if (!savePurchaseMutation.isPending && lineItems.length > 0) {
+            if (!updateDispatchMutation.isPending && lineItems.length > 0) {
               handleSave();
             }
             break;
@@ -200,7 +239,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
             if (onClose) {
               onClose();
             } else {
-              navigate('/admin/stock/purchase');
+              navigate('/admin/stock/sale');
             }
             break;
         }
@@ -209,7 +248,18 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [savePurchaseMutation.isPending, lineItems.length, handleSave, addLineItem, navigate]);
+  }, [updateDispatchMutation.isPending, lineItems.length, handleSave, addLineItem, navigate]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex items-center gap-2">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span>Loading dispatch data...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -218,11 +268,9 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-             
-            
               <div>
-                <h1 className="text-2xl font-semibold text-gray-900">New Purchase Receipt</h1>
-                <p className="text-sm text-gray-500 mt-0.5">Create a new goods received note (GRN)</p>
+                <h1 className="text-2xl font-semibold text-gray-900">Edit MR Dispatch</h1>
+                <p className="text-sm text-gray-500 mt-0.5">Modify existing medical representative dispatch</p>
               </div>
             </div>
             
@@ -231,21 +279,19 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
               <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
                 Ctrl+S to save
               </div>
-          
             </div>
           </div>
         </div>
       </div>
 
       <div className="p-6 max-w-[100%] mx-auto space-y-6">
-
         {/* Header Section */}
         <Card className="shadow-lg border-0 bg-white rounded-xl">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg font-semibold text-gray-900">Purchase Details</CardTitle>
-                <p className="text-sm text-gray-500 mt-1">Enter the basic information for this purchase receipt</p>
+                <CardTitle className="text-lg font-semibold text-gray-900">Dispatch Details</CardTitle>
+                <p className="text-sm text-gray-500 mt-1">Update the basic information for this MR dispatch</p>
               </div>
               <div className="flex items-center gap-2 text-xs text-gray-500">
                 <div className="w-2 h-2 bg-red-400 rounded-full"></div>
@@ -256,23 +302,20 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="supplier" className="text-sm font-medium text-gray-700">
-                  Supplier <span className="text-red-400">*</span>
+                <Label htmlFor="medical_representative_id" className="text-sm font-medium text-gray-700">
+                  Medical Representative <span className="text-red-400">*</span>
                 </Label>
                 <Select 
-                  value={formData.supplier_id} 
-                  onValueChange={(value) => setFormData({...formData, supplier_id: value})}
+                  value={formData.medical_representative_id} 
+                  onValueChange={(value) => setFormData({...formData, medical_representative_id: value})}
                 >
                   <SelectTrigger className="h-9 rounded-lg">
-                    <SelectValue placeholder="Choose supplier..." />
+                    <SelectValue placeholder="Select MR" />
                   </SelectTrigger>
-                  <SelectContent className="rounded-lg">
-                    {suppliers?.map((supplier) => (
-                      <SelectItem key={supplier.id} value={supplier.id}>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{supplier.supplier_name}</span>
-                          <span className="text-xs text-gray-500">{supplier.supplier_code}</span>
-                        </div>
+                  <SelectContent>
+                    {medicalReps?.map((mr) => (
+                      <SelectItem key={mr.id} value={mr.user_id}>
+                        {mr.name} ({mr.email})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -280,60 +323,60 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="grn_number" className="text-sm font-medium text-gray-700">
-                  GRN Number <span className="text-red-400">*</span>
+                <Label htmlFor="dispatch_note" className="text-sm font-medium text-gray-700">
+                  Dispatch Note/Reference ID <span className="text-red-400">*</span>
                 </Label>
                 <Input
-                  id="grn_number"
-                  value={formData.grn_number}
-                  onChange={(e) => setFormData({...formData, grn_number: e.target.value})}
-                  placeholder="e.g., GRN-2024-001"
+                  id="dispatch_note"
+                  value={formData.dispatch_note}
+                  onChange={(e) => setFormData({...formData, dispatch_note: e.target.value})}
+                  placeholder="e.g., DISP-2024-001"
                   className="h-9 rounded-lg"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="receipt_date" className="text-sm font-medium text-gray-700">
-                  Purchase Date <span className="text-red-400">*</span>
+                <Label htmlFor="dispatch_date" className="text-sm font-medium text-gray-700">
+                  Dispatch Date <span className="text-red-400">*</span>
                 </Label>
                 <Input
-                  id="receipt_date"
+                  id="dispatch_date"
                   type="date"
-                  value={formData.receipt_date}
-                  onChange={(e) => setFormData({...formData, receipt_date: e.target.value})}
+                  value={formData.dispatch_date}
+                  onChange={(e) => setFormData({...formData, dispatch_date: e.target.value})}
                   className="h-9 rounded-lg"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-700">Notes</Label>
+                <Label className="text-sm font-medium text-gray-700">Overall Notes</Label>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setShowReceiptNotes(!showReceiptNotes)}
+                  onClick={() => setShowDispatchNotes(!showDispatchNotes)}
                   className="h-9 w-full justify-between rounded-lg"
                 >
                   <span className="text-sm">{formData.notes ? 'Notes added' : 'Add notes'}</span>
-                  {showReceiptNotes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  {showDispatchNotes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
 
-            {showReceiptNotes && (
+            {showDispatchNotes && (
               <div className="space-y-2 pt-2">
                 <Textarea
                   id="notes"
                   value={formData.notes}
                   onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                  placeholder="Enter any general notes for this receipt (optional)"
+                  placeholder="Enter any general notes for this dispatch (optional)"
                   rows={3}
                   className="resize-none rounded-lg"
                 />
               </div>
             )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
         {/* Line Items Section */}
         <Card className="shadow-lg border-0 bg-white rounded-xl">
@@ -342,7 +385,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
               <div>
                 <CardTitle className="text-lg font-semibold text-gray-900">Product Line Items</CardTitle>
                 <p className="text-sm text-gray-500 mt-1">
-                  Add products to this purchase receipt
+                  Modify products in this MR dispatch
                   {lineItems.length > 0 && (
                     <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                       {lineItems.length} item{lineItems.length !== 1 ? 's' : ''}
@@ -390,17 +433,11 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
                       {index + 1}
                     </div>
                     <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
-                      <ReceiptLineItem
+                      <DispatchLineItem
                         item={item}
                         onUpdate={(updates) => updateLineItem(item.id, updates)}
                         onRemove={() => removeLineItem(item.id)}
-                        onCreateBatch={(productId) => {
-                          setSelectedProductId(productId);
-                          setIsBatchModalOpen(true);
-                        }}
-                        isCompact={true}
-                        showNotes={expandedLineItems.has(item.id)}
-                        onToggleNotes={() => toggleLineItemNotes(item.id)}
+                        showGodownStock={true}
                       />
                     </div>
                   </div>
@@ -424,7 +461,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
         </Card>
 
         {/* Summary and Actions */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-lg">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-6">
               <div className="text-sm text-gray-600">
@@ -432,7 +469,7 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
               </div>
               {lineItems.length > 0 && (
                 <div className="text-sm text-gray-600">
-                  <span className="font-medium">Total Cost:</span> $
+                  <span className="font-medium">Total Amount:</span> ₹
                   {lineItems.reduce((sum, item) => sum + (item.quantity_strips * item.cost_per_strip), 0).toFixed(2)}
                 </div>
               )}
@@ -441,46 +478,31 @@ const NewPurchase = ({ onClose }: NewPurchaseProps = {}) => {
             <div className="flex items-center gap-3">
               <Button 
                 variant="outline" 
-                onClick={() => onClose ? onClose() : navigate('/admin/stock/purchase')}
+                onClick={() => onClose ? onClose() : navigate('/admin/stock/sale')}
                 className="px-6 rounded-lg"
               >
                 Cancel
               </Button>
               <Button 
                 onClick={handleSave}
-                disabled={savePurchaseMutation.isPending || lineItems.length === 0}
+                disabled={updateDispatchMutation.isPending || lineItems.length === 0}
                 className="px-6 bg-blue-600 hover:bg-blue-700 rounded-lg"
               >
-                {savePurchaseMutation.isPending ? (
+                {updateDispatchMutation.isPending ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Saving...
+                    Updating...
                   </>
                 ) : (
-                  'Save Purchase'
+                  'Update Dispatch'
                 )}
               </Button>
             </div>
           </div>
         </div>
       </div>
-
-      {/* Batch Modal */}
-      {selectedProduct && (
-        <BatchModal
-          isOpen={isBatchModalOpen}
-          onClose={() => {
-            setIsBatchModalOpen(false);
-            setSelectedProductId('');
-          }}
-          onSuccess={handleBatchCreated}
-          editingBatch={null}
-          productId={selectedProductId}
-          product={selectedProduct}
-        />
-      )}
     </div>
   );
 };
 
-export default NewPurchase;
+export default EditMRDispatch;

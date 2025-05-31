@@ -1,15 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Trash2, Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trash2, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
-interface ReceiptLineItemProps {
+interface DispatchLineItemProps {
   item: {
     id: string;
     product_id: string;
@@ -20,18 +20,22 @@ interface ReceiptLineItemProps {
     cost_per_strip: number;
     notes: string;
   };
-  onUpdate: (updates: any) => void;
+  onUpdate: (updates: Partial<DispatchLineItemProps['item']>) => void;
   onRemove: () => void;
-  onCreateBatch: (productId: string) => void;
-  isCompact?: boolean;
-  showNotes?: boolean;
-  onToggleNotes?: () => void;
+  showGodownStock?: boolean;
 }
 
-const ReceiptLineItem = ({ item, onUpdate, onRemove, onCreateBatch, isCompact = false, showNotes = true, onToggleNotes }: ReceiptLineItemProps) => {
+const DispatchLineItem: React.FC<DispatchLineItemProps> = ({
+  item,
+  onUpdate,
+  onRemove,
+  showGodownStock = false,
+}) => {
+  const [availableStock, setAvailableStock] = useState<number>(0);
+
   // Fetch products
   const { data: products } = useQuery({
-    queryKey: ['products-for-receipt'],
+    queryKey: ['products'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
@@ -50,10 +54,10 @@ const ReceiptLineItem = ({ item, onUpdate, onRemove, onCreateBatch, isCompact = 
       if (!item.product_id) return [];
       const { data, error } = await supabase
         .from('product_batches')
-        .select('id, batch_number, batch_cost_per_strip, expiry_date')
+        .select('*')
         .eq('product_id', item.product_id)
         .eq('status', 'Active')
-        .order('batch_number');
+        .order('expiry_date');
       if (error) throw error;
       return data;
     },
@@ -67,7 +71,7 @@ const ReceiptLineItem = ({ item, onUpdate, onRemove, onCreateBatch, isCompact = 
       if (!item.product_id) return [];
       const { data, error } = await supabase
         .from('product_packaging_units')
-        .select('id, unit_name, conversion_factor_to_strips, default_purchase_unit')
+        .select('*')
         .eq('product_id', item.product_id)
         .order('order_in_hierarchy');
       if (error) throw error;
@@ -76,303 +80,264 @@ const ReceiptLineItem = ({ item, onUpdate, onRemove, onCreateBatch, isCompact = 
     enabled: !!item.product_id,
   });
 
-  const handleProductChange = (productId: string) => {
-    const product = products?.find(p => p.id === productId);
-    onUpdate({
-      product_id: productId,
-      batch_id: '',
-      unit_id: '',
-      cost_per_strip: product?.base_cost_per_strip || 0,
-    });
-  };
+  // Fetch godown stock for selected batch
+  const { data: godownStock } = useQuery({
+    queryKey: ['godown-stock', item.batch_id],
+    queryFn: async () => {
+      if (!item.batch_id || !showGodownStock) return 0;
+      
+      // Get inflow from purchases
+      const { data: purchaseData, error: purchaseError } = await supabase
+        .from('stock_purchases')
+        .select('quantity_strips')
+        .eq('batch_id', item.batch_id);
+      
+      if (purchaseError) throw purchaseError;
+      
+      const purchaseInflow = purchaseData?.reduce((sum, tx) => sum + tx.quantity_strips, 0) || 0;
+      
+      // Get inflow from adjustments (returns, etc.)
+      const { data: adjustmentInflowData, error: adjustmentInflowError } = await supabase
+        .from('stock_adjustments')
+        .select('quantity_strips')
+        .eq('batch_id', item.batch_id)
+        .eq('location_type_destination', 'GODOWN')
+        .gt('quantity_strips', 0);
+      
+      if (adjustmentInflowError) throw adjustmentInflowError;
+      
+      const adjustmentInflow = adjustmentInflowData?.reduce((sum, tx) => sum + tx.quantity_strips, 0) || 0;
+      
+      // Get outflow from sales
+      const { data: salesData, error: salesError } = await supabase
+        .from('stock_sales')
+        .select('quantity_strips')
+        .eq('batch_id', item.batch_id)
+        .eq('location_type_source', 'GODOWN');
+      
+      if (salesError) throw salesError;
+      
+      const salesOutflow = salesData?.reduce((sum, tx) => sum + Math.abs(tx.quantity_strips), 0) || 0;
+      
+      // Get outflow from adjustments (damages, losses, etc.)
+      const { data: adjustmentOutflowData, error: adjustmentOutflowError } = await supabase
+        .from('stock_adjustments')
+        .select('quantity_strips')
+        .eq('batch_id', item.batch_id)
+        .eq('location_type_source', 'GODOWN')
+        .lt('quantity_strips', 0);
+      
+      if (adjustmentOutflowError) throw adjustmentOutflowError;
+      
+      const adjustmentOutflow = adjustmentOutflowData?.reduce((sum, tx) => sum + Math.abs(tx.quantity_strips), 0) || 0;
+      
+      // Calculate total stock
+      const totalInflow = purchaseInflow + adjustmentInflow;
+      const totalOutflow = salesOutflow + adjustmentOutflow;
+      
+      return Math.max(0, totalInflow - totalOutflow);
+    },
+    enabled: !!item.batch_id && showGodownStock,
+  });
 
-  const handleBatchChange = (batchId: string) => {
-    const batch = batches?.find(b => b.id === batchId);
-    onUpdate({
-      batch_id: batchId,
-      cost_per_strip: batch?.batch_cost_per_strip || item.cost_per_strip,
-    });
-  };
+  useEffect(() => {
+    if (godownStock !== undefined) {
+      setAvailableStock(godownStock);
+    }
+  }, [godownStock]);
 
-  const handleQuantityChange = (quantity: number) => {
-    const unit = packagingUnits?.find(u => u.id === item.unit_id);
-    const conversionFactor = unit?.conversion_factor_to_strips || 1;
-    const quantityStrips = quantity * conversionFactor;
-    
-    onUpdate({
-      quantity,
-      quantity_strips: quantityStrips,
-    });
-  };
+  // Calculate quantity in strips when quantity or unit changes
+  useEffect(() => {
+    if (item.quantity && item.unit_id && packagingUnits) {
+      const selectedUnit = packagingUnits.find(unit => unit.id === item.unit_id);
+      if (selectedUnit) {
+        const quantityInStrips = item.quantity * selectedUnit.conversion_factor_to_strips;
+        onUpdate({ quantity_strips: quantityInStrips });
+      }
+    }
+  }, [item.quantity, item.unit_id, packagingUnits]);
 
-  const handleUnitChange = (unitId: string) => {
-    const unit = packagingUnits?.find(u => u.id === unitId);
-    const conversionFactor = unit?.conversion_factor_to_strips || 1;
-    const quantityStrips = item.quantity * conversionFactor;
-    
-    onUpdate({
-      unit_id: unitId,
-      quantity_strips: quantityStrips,
-    });
-  };
+  // Update cost per strip when batch changes
+  useEffect(() => {
+    if (item.batch_id && batches) {
+      const selectedBatch = batches.find(batch => batch.id === item.batch_id);
+      if (selectedBatch?.batch_cost_per_strip) {
+        onUpdate({ cost_per_strip: selectedBatch.batch_cost_per_strip });
+      } else if (item.product_id && products) {
+        const selectedProduct = products.find(product => product.id === item.product_id);
+        if (selectedProduct) {
+          onUpdate({ cost_per_strip: selectedProduct.base_cost_per_strip });
+        }
+      }
+    }
+  }, [item.batch_id, batches, item.product_id, products]);
 
-  if (isCompact) {
-    return (
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className="font-medium text-gray-900">Product Line</h4>
-          <div className="flex items-center gap-2">
-            {onToggleNotes && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onToggleNotes}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                {item.notes ? 'Notes added' : 'Add notes'}
-                {showNotes ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
-              </Button>
-            )}
-            <Button variant="outline" size="sm" onClick={onRemove} className="text-red-600 hover:text-red-700">
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+  const selectedProduct = products?.find(p => p.id === item.product_id);
+  const selectedBatch = batches?.find(b => b.id === item.batch_id);
+  const isQuantityExceeded = showGodownStock && item.quantity_strips > availableStock;
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs font-medium text-gray-600">Product *</Label>
-            <Select value={item.product_id} onValueChange={handleProductChange}>
-              <SelectTrigger className="h-8 text-sm rounded-lg">
-                <SelectValue placeholder="Select product" />
-              </SelectTrigger>
-              <SelectContent className="rounded-lg">
-                {products?.map((product) => (
-                  <SelectItem key={product.id} value={product.id}>
-                    {product.product_name} ({product.product_code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs font-medium text-gray-600">Batch *</Label>
-            <div className="flex gap-1">
-              <Select value={item.batch_id} onValueChange={handleBatchChange} disabled={!item.product_id}>
-                <SelectTrigger className="h-8 text-sm flex-1 rounded-lg">
-                  <SelectValue placeholder="Select batch" />
-                </SelectTrigger>
-                <SelectContent className="rounded-lg">
-                  {batches?.map((batch) => (
-                    <SelectItem key={batch.id} value={batch.id}>
-                      {batch.batch_number}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => item.product_id && onCreateBatch(item.product_id)}
-                disabled={!item.product_id}
-                className="h-8 w-8 p-0 rounded-lg"
-              >
-                <Plus className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs font-medium text-gray-600">Unit *</Label>
-            <Select value={item.unit_id} onValueChange={handleUnitChange} disabled={!item.product_id}>
-              <SelectTrigger className="h-8 text-sm rounded-lg">
-                <SelectValue placeholder="Select unit" />
-              </SelectTrigger>
-              <SelectContent className="rounded-lg">
-                {packagingUnits?.map((unit) => (
-                  <SelectItem key={unit.id} value={unit.id}>
-                    {unit.unit_name} ({unit.conversion_factor_to_strips})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs font-medium text-gray-600">Quantity *</Label>
-            <Input
-              type="number"
-              value={item.quantity}
-              onChange={(e) => handleQuantityChange(Number(e.target.value))}
-              placeholder="Qty"
-              min="0"
-              step="1"
-              className="h-8 text-sm rounded-lg"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs font-medium text-gray-600">Strips</Label>
-            <Input
-              value={item.quantity_strips}
-              readOnly
-              className="h-8 text-sm bg-gray-50 rounded-lg"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs font-medium text-gray-600">Cost/Strip</Label>
-            <Input
-              type="number"
-              value={item.cost_per_strip}
-              onChange={(e) => onUpdate({ cost_per_strip: Number(e.target.value) })}
-              placeholder="0.00"
-              min="0"
-              step="0.01"
-              className="h-8 text-sm rounded-lg"
-            />
-          </div>
-        </div>
-
-        {showNotes && (
-          <div className="space-y-1">
-            <Label className="text-xs font-medium text-gray-600">Line Notes</Label>
-            <Textarea
-              value={item.notes}
-              onChange={(e) => onUpdate({ notes: e.target.value })}
-              placeholder="Enter any notes for this line item"
-              rows={2}
-              className="text-sm resize-none rounded-lg"
-            />
-          </div>
-        )}
-      </div>
-    );
-  }
+  const [showNotes, setShowNotes] = useState(false);
 
   return (
-    <Card className="border-l-4 border-l-blue-500 rounded-xl">
-      <CardContent className="pt-6">
-        <div className="flex items-start justify-between mb-4">
-          <h4 className="font-medium">Product Line</h4>
-          <Button variant="outline" size="sm" onClick={onRemove} className="rounded-lg">
+    <div className="border rounded-lg p-4 bg-gray-50">
+      <div className="flex flex-wrap items-start gap-4">
+        {/* Product Selection */}
+        <div className="flex-1 min-w-[200px]">
+          <Label className="text-xs font-medium text-gray-600">Product *</Label>
+          <Select 
+            value={item.product_id} 
+            onValueChange={(value) => onUpdate({ 
+              product_id: value, 
+              batch_id: '', 
+              unit_id: '',
+              quantity: 0,
+              quantity_strips: 0 
+            })}
+          >
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue placeholder="Select product" />
+            </SelectTrigger>
+            <SelectContent>
+              {products?.map((product) => (
+                <SelectItem key={product.id} value={product.id} className="text-sm">
+                  {product.product_name} ({product.product_code})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Batch Selection */}
+        <div className="flex-1 min-w-[180px]">
+          <Label className="text-xs font-medium text-gray-600">Batch *</Label>
+          <div className="flex items-center gap-2">
+            <Select 
+              value={item.batch_id} 
+              onValueChange={(value) => onUpdate({ batch_id: value })}
+              disabled={!item.product_id}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Select batch" />
+              </SelectTrigger>
+              <SelectContent>
+                {batches?.map((batch) => (
+                  <SelectItem key={batch.id} value={batch.id} className="text-sm">
+                    {batch.batch_number} (Exp: {new Date(batch.expiry_date).toLocaleDateString()})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedBatch && showGodownStock && (
+              <span className="text-xs text-gray-500 whitespace-nowrap">
+                Stock: {availableStock}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Quantity */}
+        <div className="w-24">
+          <Label className="text-xs font-medium text-gray-600">Qty *</Label>
+          <Input
+            type="number"
+            value={item.quantity || ''}
+            onChange={(e) => onUpdate({ quantity: parseInt(e.target.value) || 0 })}
+            placeholder="Qty"
+            min="1"
+            className="h-8 text-sm"
+          />
+        </div>
+
+        {/* Unit */}
+        <div className="w-32">
+          <Label className="text-xs font-medium text-gray-600">Unit *</Label>
+          <Select 
+            value={item.unit_id} 
+            onValueChange={(value) => onUpdate({ unit_id: value })}
+            disabled={!item.product_id}
+          >
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue placeholder="Select unit" />
+            </SelectTrigger>
+            <SelectContent>
+              {packagingUnits?.map((unit) => (
+                <SelectItem key={unit.id} value={unit.id} className="text-sm">
+                  {unit.unit_name} ({unit.conversion_factor_to_strips})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Strips */}
+        <div className="w-24">
+          <Label className="text-xs font-medium text-gray-600">Strips</Label>
+          <Input
+            value={item.quantity_strips || 0}
+            readOnly
+            className="h-8 bg-gray-50 text-sm"
+          />
+        </div>
+
+        {/* Cost */}
+        <div className="w-24">
+          <Label className="text-xs font-medium text-gray-600">Cost/Strip</Label>
+          <Input
+            value={item.cost_per_strip?.toFixed(2) || '0.00'}
+            readOnly
+            className="h-8 bg-gray-50 text-sm"
+          />
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-end gap-2 ml-auto">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowNotes(!showNotes)}
+            className="h-8 w-8 text-gray-500 hover:bg-gray-200"
+          >
+            {showNotes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onRemove}
+            className="h-8 w-8 text-red-500 hover:bg-red-50"
+          >
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div>
-            <Label>Product *</Label>
-            <Select value={item.product_id} onValueChange={handleProductChange}>
-              <SelectTrigger className="rounded-lg">
-                <SelectValue placeholder="Select product" />
-              </SelectTrigger>
-              <SelectContent className="rounded-lg">
-                {products?.map((product) => (
-                  <SelectItem key={product.id} value={product.id}>
-                    {product.product_name} ({product.product_code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label>Batch *</Label>
-            <div className="flex gap-2">
-              <Select value={item.batch_id} onValueChange={handleBatchChange} disabled={!item.product_id}>
-                <SelectTrigger className="flex-1 rounded-lg">
-                  <SelectValue placeholder="Select batch" />
-                </SelectTrigger>
-                <SelectContent className="rounded-lg">
-                  {batches?.map((batch) => (
-                    <SelectItem key={batch.id} value={batch.id}>
-                      {batch.batch_number}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => item.product_id && onCreateBatch(item.product_id)}
-                disabled={!item.product_id}
-                className="rounded-lg"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div>
-            <Label>Unit *</Label>
-            <Select value={item.unit_id} onValueChange={handleUnitChange} disabled={!item.product_id}>
-              <SelectTrigger className="rounded-lg">
-                <SelectValue placeholder="Select unit" />
-              </SelectTrigger>
-              <SelectContent className="rounded-lg">
-                {packagingUnits?.map((unit) => (
-                  <SelectItem key={unit.id} value={unit.id}>
-                    {unit.unit_name} ({unit.conversion_factor_to_strips} strips)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label>Quantity *</Label>
-            <Input
-              type="number"
-              value={item.quantity}
-              onChange={(e) => handleQuantityChange(Number(e.target.value))}
-              placeholder="Enter quantity"
-              min="0"
-              step="1"
-              className="rounded-lg"
-            />
-          </div>
-
-          <div>
-            <Label>Quantity (Strips)</Label>
-            <Input
-              value={item.quantity_strips}
-              readOnly
-              className="bg-gray-50 rounded-lg"
-            />
-          </div>
-
-          <div>
-            <Label>Cost per Strip</Label>
-            <Input
-              type="number"
-              value={item.cost_per_strip}
-              onChange={(e) => onUpdate({ cost_per_strip: Number(e.target.value) })}
-              placeholder="Cost per strip"
-              min="0"
-              step="0.01"
-              className="rounded-lg"
-            />
-          </div>
+      {/* Validation Alert */}
+      {isQuantityExceeded && (
+        <div className="mt-2">
+          <Alert variant="destructive" className="py-2">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              Quantity ({item.quantity_strips} strips) exceeds available stock ({availableStock} strips)
+            </AlertDescription>
+          </Alert>
         </div>
+      )}
 
-        <div className="mt-4">
-          <Label>Line Notes</Label>
+      {/* Collapsible Notes */}
+      {showNotes && (
+        <div className="mt-3 pt-3 border-t">
+          <Label className="text-xs font-medium text-gray-600">Notes</Label>
           <Textarea
             value={item.notes}
             onChange={(e) => onUpdate({ notes: e.target.value })}
-            placeholder="Enter any notes for this line item"
+            placeholder="Add notes for this line item (optional)"
             rows={2}
-            className="rounded-lg"
+            className="text-sm"
           />
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 };
 
-export default ReceiptLineItem;
+export default DispatchLineItem;
