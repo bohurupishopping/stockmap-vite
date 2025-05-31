@@ -827,6 +827,51 @@ export type Database = {
           },
         ]
       }
+      closing_stock_view: {
+        Row: {
+          id: string
+          product_id: string
+          product_code: string
+          product_name: string
+          generic_name: string
+          batch_id: string
+          batch_number: string
+          expiry_date: string
+          location_type: string
+          location_id: string
+          quantity_strips: number
+          cost_per_strip: number
+          total_value: number
+          category_id: string
+          category_name: string | null
+          min_stock_level_godown: number | null
+          min_stock_level_mr: number | null
+          last_updated_at: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "closing_stock_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "closing_stock_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "product_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "closing_stock_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "product_categories"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Functions: {
       is_admin: {

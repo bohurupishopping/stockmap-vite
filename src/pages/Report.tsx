@@ -51,413 +51,82 @@ const ReportPage = () => {
     setCurrentPage(1);
   };
 
-  // Fetch stock data with proper calculation
+  // Fetch stock data from the new closing_stock_view
   const { data: stockData, isLoading } = useQuery({
-    queryKey: ['stock-status', locationFilter, productFilter, categoryFilter, batchFilter, expiryFromDate, expiryToDate],
+    queryKey: ['closing-stock', locationFilter, productFilter, categoryFilter, batchFilter, expiryFromDate, expiryToDate],
     queryFn: async () => {
       try {
-        // First, fetch all products for later lookup
-        const { data: products, error: productsError } = await supabase
-          .from('products')
-          .select(`
-            id,
-            product_name,
-            product_code,
-            generic_name,
-            min_stock_level_godown,
-            min_stock_level_mr,
-            product_categories (
-              category_name
-            )
-          `);
-        
-        if (productsError) {
-          console.error('Error fetching products:', productsError);
-          throw productsError;
-        }
-        
-        // Create a map of products for quick lookup
-        const productMap = new Map();
-        products?.forEach(product => {
-          productMap.set(product.id, product);
-        });
-        
-        // Fetch all batches for later lookup
-        const { data: batches, error: batchesError } = await supabase
-          .from('product_batches')
-          .select(`
-            id,
-            batch_number,
-            expiry_date
-          `);
-        
-        if (batchesError) {
-          console.error('Error fetching batches:', batchesError);
-          throw batchesError;
-        }
-        
-        // Create a map of batches for quick lookup
-        const batchMap = new Map();
-        batches?.forEach(batch => {
-          batchMap.set(batch.id, batch);
-        });
-
-        // Build query for transactions
+        // Build query for closing_stock_view
         let query = supabase
-          .from('stock_transactions_view')
-          .select(`
-            product_id,
-            batch_id,
-            transaction_type,
-            quantity_strips,
-            location_type_source,
-            location_id_source,
-            location_type_destination,
-            location_id_destination,
-            cost_per_strip_at_transaction,
-            transaction_date
-          `);
+          .from('closing_stock_view')
+          .select('*');
 
-        // Apply filters
+        // Apply location filter
+        if (locationFilter !== 'ALL') {
+          if (locationFilter === 'GODOWN') {
+            query = query.eq('location_type', 'GODOWN');
+          } else if (locationFilter === 'MR') {
+            query = query.eq('location_type', 'MR');
+          } else if (locationFilter.startsWith('MR_')) {
+            const mrId = locationFilter.replace('MR_', '');
+            query = query.eq('location_type', 'MR').eq('location_id', mrId);
+          }
+        }
+
+        // Apply product filter
         if (productFilter) {
-          // Get product IDs that match the filter
-          const filteredProductIds = products
-            ?.filter(p => 
-              p.product_name.toLowerCase().includes(productFilter.toLowerCase()) || 
-              p.product_code.toLowerCase().includes(productFilter.toLowerCase())
-            )
-            .map(p => p.id);
-          
-          if (filteredProductIds && filteredProductIds.length > 0) {
-            query = query.in('product_id', filteredProductIds);
-          } else {
-            // No products match the filter, return empty result
-            return [];
-          }
+          query = query.or(`product_code.ilike.%${productFilter}%,product_name.ilike.%${productFilter}%`);
         }
 
+        // Apply category filter
+        if (categoryFilter !== 'ALL') {
+          query = query.eq('category_name', categoryFilter);
+        }
+
+        // Apply batch filter
         if (batchFilter) {
-          // Get batch IDs that match the filter
-          const filteredBatchIds = batches
-            ?.filter(b => b.batch_number.toLowerCase().includes(batchFilter.toLowerCase()))
-            .map(b => b.id);
-          
-          if (filteredBatchIds && filteredBatchIds.length > 0) {
-            query = query.in('batch_id', filteredBatchIds);
-          } else {
-            // No batches match the filter, return empty result
-            return [];
-          }
+          query = query.ilike('batch_number', `%${batchFilter}%`);
         }
 
+        // Apply expiry date filter
         if (expiryFromDate && expiryToDate) {
-          // Get batch IDs that match the expiry date range
-          const filteredBatchIds = batches
-            ?.filter(b => {
-              const expiryDate = new Date(b.expiry_date);
-              const fromDate = new Date(expiryFromDate);
-              const toDate = new Date(expiryToDate);
-              return expiryDate >= fromDate && expiryDate <= toDate;
-            })
-            .map(b => b.id);
-          
-          if (filteredBatchIds && filteredBatchIds.length > 0) {
-            query = query.in('batch_id', filteredBatchIds);
-          } else {
-            // No batches match the filter, return empty result
-            return [];
-          }
+          query = query
+            .gte('expiry_date', expiryFromDate)
+            .lte('expiry_date', expiryToDate);
         }
 
+        // Only show items with positive quantity
+        query = query.gt('quantity_strips', 0);
 
-        const { data: transactions, error } = await query;
+        const { data, error } = await query;
         
         if (error) {
           console.error('Supabase query error:', error);
           throw error;
         }
         
-
-        // Apply category filter if needed
-        let filteredData = transactions || [];
-        if (categoryFilter && categoryFilter !== 'ALL') {
-
-          filteredData = filteredData.filter(tx => {
-            const product = productMap.get(tx.product_id);
-            if (!product || !product.product_categories) return false;
-            
-            // Handle both array and object responses from Supabase
-            const categories = Array.isArray(product.product_categories) 
-              ? product.product_categories 
-              : [product.product_categories];
-            
-            return categories.some((cat: any) => cat.category_name === categoryFilter);
-          });
-
-        }
-
-        // Calculate actual stock by processing all transactions
-        const stockMap = new Map<string, StockItem>();
-
-        filteredData.forEach((transaction: any) => {
-          try {
-            // Get product and batch data from our maps
-            const product = productMap.get(transaction.product_id);
-            const batch = batchMap.get(transaction.batch_id);
-            
-            // Skip transactions with missing related data
-            if (!product || !batch) {
-
-              return;
-            }
-            
-            // Helper function to get or create a stock item entry
-            const getOrCreateStockItem = (productId: string, batchId: string, locationType: string, locationId: string) => {
-              const key = `${productId}_${batchId}_${locationType}_${locationId}`;
-              
-              if (!stockMap.has(key)) {
-                // Handle both array and object responses from Supabase
-                const categories = Array.isArray(product.product_categories) 
-                  ? product.product_categories 
-                  : product.product_categories ? [product.product_categories] : [];
-                
-                stockMap.set(key, {
-                  product_id: productId,
-                  product_name: product.product_name,
-                  product_code: product.product_code,
-                  generic_name: product.generic_name,
-                  batch_id: batchId,
-                  batch_number: batch.batch_number,
-                  expiry_date: batch.expiry_date,
-                  location_type: locationType,
-                  location_id: locationId,
-                  current_quantity_strips: 0,
-                  cost_per_strip: transaction.cost_per_strip_at_transaction,
-                  total_value: 0,
-                  category_name: categories[0]?.category_name,
-                  min_stock_level_godown: product.min_stock_level_godown,
-                  min_stock_level_mr: product.min_stock_level_mr,
-                });
-              }
-              
-              return stockMap.get(key)!;
-            };
-            
-            // Process based on transaction type
-            const txType = transaction.transaction_type;
-            
-            // Determine the location and direction of stock movement
-            let stockLocation: string | null = null;
-            let stockLocationId: string | null = null;
-            let quantityChange = 0;
-            
-            // Process based on transaction type to determine the correct stock location and quantity change
-            if (txType === 'STOCK_IN_GODOWN') {
-              // Stock coming into godown (positive)
-              stockLocation = 'GODOWN';
-              stockLocationId = '';
-              quantityChange = transaction.quantity_strips; // Positive for inflow
-            }
-            else if (txType === 'DISPATCH_TO_MR') {
-              // For dispatch, we have two effects:
-              // 1. Decrease in godown stock
-              if (transaction.location_type_source === 'GODOWN') {
-                // Only process if we're interested in godown or all locations
-                if (locationFilter === 'ALL' || locationFilter === 'GODOWN') {
-                  const godownItem = getOrCreateStockItem(
-                    transaction.product_id,
-                    transaction.batch_id,
-                    'GODOWN',
-                    ''
-                  );
-                  godownItem.current_quantity_strips -= transaction.quantity_strips;
-                }
-              }
-              
-              // 2. Increase in MR stock
-              if (transaction.location_type_destination === 'MR' && transaction.location_id_destination) {
-                // Only process if we're interested in this MR or all MRs or all locations
-                const mrId = transaction.location_id_destination;
-                if (locationFilter === 'ALL' || 
-                    locationFilter === 'MR' || 
-                    (locationFilter.startsWith('MR_') && locationFilter.replace('MR_', '') === mrId)) {
-                  const mrItem = getOrCreateStockItem(
-                    transaction.product_id,
-                    transaction.batch_id,
-                    'MR',
-                    mrId
-                  );
-                  mrItem.current_quantity_strips += transaction.quantity_strips;
-                  mrItem.cost_per_strip = transaction.cost_per_strip_at_transaction;
-                }
-              }
-              
-              // Skip the default processing since we've handled both sides
-              return;
-            }
-            else if (txType === 'SALE_DIRECT_GODOWN') {
-              // Sale directly from godown (negative for godown)
-              if (transaction.location_type_source === 'GODOWN') {
-                stockLocation = 'GODOWN';
-                stockLocationId = '';
-                quantityChange = -transaction.quantity_strips; // Negative for outflow
-              }
-            }
-            else if (txType === 'SALE_BY_MR') {
-              // Sale by MR (negative for MR)
-              if (transaction.location_type_source === 'MR' && transaction.location_id_source) {
-                stockLocation = 'MR';
-                stockLocationId = transaction.location_id_source;
-                quantityChange = -transaction.quantity_strips; // Negative for outflow
-              }
-            }
-            else if (txType.includes('RETURN_TO_GODOWN')) {
-              // Return to godown (positive for godown, negative for source if MR)
-              if (transaction.location_type_destination === 'GODOWN') {
-                // Add to godown
-                if (locationFilter === 'ALL' || locationFilter === 'GODOWN') {
-                  const godownItem = getOrCreateStockItem(
-                    transaction.product_id,
-                    transaction.batch_id,
-                    'GODOWN',
-                    ''
-                  );
-                  godownItem.current_quantity_strips += transaction.quantity_strips;
-                  godownItem.cost_per_strip = transaction.cost_per_strip_at_transaction;
-                }
-              }
-              
-              // Remove from MR if that's the source
-              if (transaction.location_type_source === 'MR' && transaction.location_id_source) {
-                const mrId = transaction.location_id_source;
-                if (locationFilter === 'ALL' || 
-                    locationFilter === 'MR' || 
-                    (locationFilter.startsWith('MR_') && locationFilter.replace('MR_', '') === mrId)) {
-                  const mrItem = getOrCreateStockItem(
-                    transaction.product_id,
-                    transaction.batch_id,
-                    'MR',
-                    mrId
-                  );
-                  mrItem.current_quantity_strips -= transaction.quantity_strips;
-                }
-              }
-              
-              // Skip default processing
-              return;
-            }
-            else if (txType.includes('ADJUST_DAMAGE_') || 
-                     txType.includes('ADJUST_LOSS_') || 
-                     txType.includes('ADJUST_EXPIRED_')) {
-              // Adjustments for damage/loss/expiry (negative)
-              if (txType.includes('_GODOWN')) {
-                stockLocation = 'GODOWN';
-                stockLocationId = '';
-              } else if (txType.includes('_MR') && transaction.location_id_source) {
-                stockLocation = 'MR';
-                stockLocationId = transaction.location_id_source;
-              }
-              
-              if (stockLocation) {
-                quantityChange = -transaction.quantity_strips; // Negative for outflow
-              }
-            }
-            else if (txType.includes('OPENING_STOCK_')) {
-              // Opening stock (positive)
-              if (txType.includes('OPENING_STOCK_GODOWN')) {
-                stockLocation = 'GODOWN';
-                stockLocationId = '';
-              } else if (txType.includes('OPENING_STOCK_MR') && transaction.location_id_destination) {
-                stockLocation = 'MR';
-                stockLocationId = transaction.location_id_destination;
-              }
-              
-              if (stockLocation) {
-                quantityChange = transaction.quantity_strips; // Positive for inflow
-              }
-            }
-            else if (txType.includes('REPLACEMENT_')) {
-              // Handle replacements
-              if (txType.includes('REPLACEMENT_FROM_GODOWN')) {
-                // Outflow from godown
-                if (locationFilter === 'ALL' || locationFilter === 'GODOWN') {
-                  const godownItem = getOrCreateStockItem(
-                    transaction.product_id,
-                    transaction.batch_id,
-                    'GODOWN',
-                    ''
-                  );
-                  godownItem.current_quantity_strips -= transaction.quantity_strips;
-                }
-              } 
-              else if (txType.includes('REPLACEMENT_FROM_MR') && transaction.location_id_source) {
-                // Outflow from MR
-                const mrId = transaction.location_id_source;
-                if (locationFilter === 'ALL' || 
-                    locationFilter === 'MR' || 
-                    (locationFilter.startsWith('MR_') && locationFilter.replace('MR_', '') === mrId)) {
-                  const mrItem = getOrCreateStockItem(
-                    transaction.product_id,
-                    transaction.batch_id,
-                    'MR',
-                    mrId
-                  );
-                  mrItem.current_quantity_strips -= transaction.quantity_strips;
-                }
-              }
-              
-              // Skip default processing
-              return;
-            }
-            
-            // Apply the stock change if we determined a location and quantity change
-            if (stockLocation && quantityChange !== 0) {
-              // Apply location filter
-              if (stockLocation === 'GODOWN' && locationFilter !== 'ALL' && locationFilter !== 'GODOWN') {
-                return;
-              }
-              
-              if (stockLocation === 'MR') {
-                if (locationFilter !== 'ALL' && locationFilter !== 'MR' && 
-                    !(locationFilter.startsWith('MR_') && locationFilter.replace('MR_', '') === stockLocationId)) {
-                  return;
-                }
-              }
-              
-              const stockItem = getOrCreateStockItem(
-                transaction.product_id,
-                transaction.batch_id,
-                stockLocation,
-                stockLocationId || ''
-              );
-              
-              stockItem.current_quantity_strips += quantityChange;
-              
-              // Update cost per strip for inflows
-              if (quantityChange > 0) {
-                stockItem.cost_per_strip = transaction.cost_per_strip_at_transaction;
-              }
-            }
-          } catch (err) {
-            console.error('Error processing transaction:', err, transaction);
-          }
-        });
-
-        // Calculate total value and filter out zero/negative stock items
-        const stockItems = Array.from(stockMap.values())
-          .filter(item => item.current_quantity_strips > 0)
-          .map(item => ({
-            ...item,
-            total_value: item.current_quantity_strips * item.cost_per_strip
-          }));
-
-        // Filter stock items by location type for internal use
-        const godownItems = stockItems.filter(item => item.location_type === 'GODOWN');
-        const mrItems = stockItems.filter(item => item.location_type === 'MR');
+        // Map the data to match the StockItem interface
+        const stockItems: StockItem[] = data.map(item => ({
+          product_id: item.product_id,
+          product_name: item.product_name,
+          product_code: item.product_code,
+          generic_name: item.generic_name,
+          batch_id: item.batch_id,
+          batch_number: item.batch_number,
+          expiry_date: item.expiry_date,
+          location_type: item.location_type,
+          location_id: item.location_id,
+          current_quantity_strips: item.quantity_strips,
+          cost_per_strip: item.cost_per_strip,
+          total_value: item.total_value,
+          category_name: item.category_name,
+          min_stock_level_godown: item.min_stock_level_godown,
+          min_stock_level_mr: item.min_stock_level_mr
+        }));
         
         return stockItems;
       } catch (error) {
-
+        console.error('Error fetching stock data:', error);
         throw error;
       }
     },
